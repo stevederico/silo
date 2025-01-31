@@ -15,6 +15,8 @@
   </a>
 </p>
 
+
+
 # Silo
 
 Silo is a privacy-first application that allows you to chat with Large Language Models (LLMs) locally on your device. It ensures 
@@ -26,6 +28,13 @@ absolute privacy and security by keeping all data processing local without any t
 - **Offline**: Use Silo anytime, anywhere without an internet connection. All information stays on your device; no data is sent to the cloud.
 - **Anonymous**: No login or personal information required. There is no usage statistics or tracking, ensuring absolute anonymity.
 - **Fast**: Provides quick answers through local processing for rapid query responses.
+
+## Example
+<div align="center">
+  <a href="#" />
+    <img alt="silo" height="600px" src="https://github.com/stevederico/silo/blob/master/example.gif">
+  </a>
+</div>
 
 ## Getting Started
 
