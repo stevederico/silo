@@ -17,9 +17,9 @@
 
 
 
-# Silo
+# silo
 
-Silo is a privacy-first application that allows you to chat with Large Language Models (LLMs) locally on your device. It ensures 
+silo is a privacy-first application that allows you to chat with Large Language Models (LLMs) locally on your device. It ensures 
 absolute privacy and security by keeping all data processing local without any tracking or monitoring.
 
 ## Features
