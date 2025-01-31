@@ -20,7 +20,7 @@
 # silo
 
 silo is a privacy-first application that allows you to chat with Large Language Models (LLMs) locally on your device. It ensures 
-absolute privacy and security by keeping all data processing local without any tracking or monitoring.
+absolute privacy and security by keeping all data processing local without any tracking or monitoring. [Available on the App Store](https://apps.apple.com/us/app/silo-private-ai-assistant/id6741248135)
 
 ## Features
 - **LLM Chat**: Works with Open-Source LLM models like Llama, Mistral, Smol, Phi, and even custom GGUF models from Hugging Face.
@@ -36,8 +36,11 @@ absolute privacy and security by keeping all data processing local without any t
   </a>
 </div>
 
-## Getting Started
+# Getting Started
 
+- [Download on the App Store](https://apps.apple.com/us/app/silo-private-ai-assistant/id6741248135)
+
+## Build 
 ### Prerequisites
 - Xcode installed on macOS
 
