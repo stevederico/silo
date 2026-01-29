@@ -7,25 +7,53 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		726FAA062D4D436B00C67466 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 726FAA022D4D436B00C67466 /* Assets.xcassets */; };
-		726FAA0E2D4D436B00C67466 /* SiloApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 726FAA032D4D436B00C67466 /* SiloApp.swift */; };
-		72BA6D9E2D4AD3B800D97817 /* llama in Frameworks */ = {isa = PBXBuildFile; productRef = 72BA6D9D2D4AD3B800D97817 /* llama */; };
 		72BA6DB42D4AD42100D97817 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 72BA6DB32D4AD42100D97817 /* Metal.framework */; };
 		72BA6DB62D4AD42600D97817 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 72BA6DB52D4AD42600D97817 /* Accelerate.framework */; };
+		72BA6DB72D4AD50000D97817 /* llama.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 72BA6DB82D4AD50000D97817 /* llama.xcframework */; };
+		72BA6DB92D4AD50000D97817 /* llama.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 72BA6DB82D4AD50000D97817 /* llama.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		72BA6DBA2D4AD50000D97817 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				72BA6DB92D4AD50000D97817 /* llama.xcframework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
-		726FAA022D4D436B00C67466 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		726FAA032D4D436B00C67466 /* SiloApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SiloApp.swift; sourceTree = "<group>"; };
 		72BA6D8B2D4AD2B000D97817 /* Silo.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Silo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		72BA6DB32D4AD42100D97817 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		72BA6DB52D4AD42600D97817 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
+		72BA6DB82D4AD50000D97817 /* llama.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = llama.xcframework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		721E71142D4C41BB00655DD9 /* Exceptions for "Silo" folder in "Silo" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 72BA6D8A2D4AD2B000D97817 /* Silo */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		726FAA182D4D438100C67466 /* src */ = {
+		72BA6D8D2D4AD2B000D97817 /* Silo */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = src;
+			exceptions = (
+				721E71142D4C41BB00655DD9 /* Exceptions for "Silo" folder in "Silo" target */,
+			);
+			explicitFolders = (
+				models,
+			);
+			path = Silo;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -37,7 +65,7 @@
 			files = (
 				72BA6DB62D4AD42600D97817 /* Accelerate.framework in Frameworks */,
 				72BA6DB42D4AD42100D97817 /* Metal.framework in Frameworks */,
-				72BA6D9E2D4AD3B800D97817 /* llama in Frameworks */,
+				72BA6DB72D4AD50000D97817 /* llama.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -47,9 +75,8 @@
 		72BA6D822D4AD2B000D97817 = {
 			isa = PBXGroup;
 			children = (
-				726FAA032D4D436B00C67466 /* SiloApp.swift */,
-				726FAA022D4D436B00C67466 /* Assets.xcassets */,
-				726FAA182D4D438100C67466 /* src */,
+				72BA6DB82D4AD50000D97817 /* llama.xcframework */,
+				72BA6D8D2D4AD2B000D97817 /* Silo */,
 				72BA6DB22D4AD42100D97817 /* Frameworks */,
 				72BA6D8C2D4AD2B000D97817 /* Products */,
 			);
@@ -82,19 +109,17 @@
 				72BA6D872D4AD2B000D97817 /* Sources */,
 				72BA6D882D4AD2B000D97817 /* Frameworks */,
 				72BA6D892D4AD2B000D97817 /* Resources */,
+				72BA6DBA2D4AD50000D97817 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				726FAA182D4D438100C67466 /* src */,
+				72BA6D8D2D4AD2B000D97817 /* Silo */,
 			);
 			name = Silo;
-			packageProductDependencies = (
-				72BA6D9D2D4AD3B800D97817 /* llama */,
-			);
-			productName = BXLocal;
+			productName = Silo;
 			productReference = 72BA6D8B2D4AD2B000D97817 /* Silo.app */;
 			productType = "com.apple.product-type.application";
 		};
@@ -106,7 +131,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1620;
-				LastUpgradeCheck = 1620;
+				LastUpgradeCheck = 2620;
 				TargetAttributes = {
 					72BA6D8A2D4AD2B000D97817 = {
 						CreatedOnToolsVersion = 16.2;
@@ -122,9 +147,6 @@
 			);
 			mainGroup = 72BA6D822D4AD2B000D97817;
 			minimizedProjectReferenceProxies = 1;
-			packageReferences = (
-				72BA6D9C2D4AD3B800D97817 /* XCRemoteSwiftPackageReference "llama.cpp" */,
-			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 72BA6D8C2D4AD2B000D97817 /* Products */;
 			projectDirPath = "";
@@ -140,7 +162,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				726FAA062D4D436B00C67466 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -151,7 +172,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				726FAA0E2D4D436B00C67466 /* SiloApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -193,6 +213,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -216,6 +237,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
@@ -256,6 +278,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -272,6 +295,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
@@ -282,27 +306,26 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "";
+				INFOPLIST_FILE = Silo/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Silo;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "CHANGE-ME.silo";
+				MARKETING_VERSION = 2.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.silo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -318,27 +341,26 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "";
+				INFOPLIST_FILE = Silo/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Silo;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "CHANGE-ME.silo";
+				MARKETING_VERSION = 2.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.silo;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
@@ -371,25 +393,6 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		72BA6D9C2D4AD3B800D97817 /* XCRemoteSwiftPackageReference "llama.cpp" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ggerganov/llama.cpp.git";
-			requirement = {
-				kind = revision;
-				revision = cc2983d3753c94a630ca7257723914d4c4f6122b;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		72BA6D9D2D4AD3B800D97817 /* llama */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 72BA6D9C2D4AD3B800D97817 /* XCRemoteSwiftPackageReference "llama.cpp" */;
-			productName = llama;
-		};
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 72BA6D832D4AD2B000D97817 /* Project object */;
 }
