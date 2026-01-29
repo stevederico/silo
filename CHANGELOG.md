@@ -1,11 +1,24 @@
 - auto download a model and have it talk to you
 - ephemeral mode
-- open source - remove bundle id and signing
 - add ipad support
 - add other countries
 - mcp?
 - passcode
 - copy and other icons udner message
+
+2.0.1
+
+  Add thinking indicator
+  Add think tag stripping
+  Add special token filter
+  Add context size setting
+  Add progress bar header
+  Add conversation summaries
+  Add scroll improvements
+  Update sampler parameters
+  Update backend ref counting
+  Fix drawer overlay tap
+  Remove migration status
 
 2.0.0
 

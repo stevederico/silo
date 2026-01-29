@@ -34,8 +34,8 @@ struct ContentView: View {
                             drawerOffset = 0
                         }
                     },
-                    onSelectConversation: { conversation in
-                        llamaState.loadConversation(conversation)
+                    onSelectConversation: { summary in
+                        llamaState.loadConversation(id: summary.id)
                         withAnimation(.easeOut(duration: 0.25)) {
                             drawerOffset = 0
                         }
@@ -50,6 +50,11 @@ struct ContentView: View {
                     HeaderView(
                         currentModel: llamaState.currentModelName,
                         models: llamaState.downloadedModels,
+                        isLoadingModel: llamaState.isLoadingModel,
+                        isDownloading: llamaState.isDownloadingDefault,
+                        isGenerating: llamaState.isGenerating,
+                        downloadProgress: llamaState.defaultDownloadProgress,
+                        modelLoadProgress: llamaState.modelLoadProgress,
                         onMenuTap: {
                             withAnimation(.easeOut(duration: 0.25)) {
                                 drawerOffset = drawerOffset > 0 ? 0 : drawerWidth
@@ -83,12 +88,18 @@ struct ContentView: View {
                                             .id(message.id)
                                     }
 
+                                    if llamaState.isGenerating && llamaState.isThinking && llamaState.currentResponse.isEmpty {
+                                        ThinkingIndicator()
+                                            .id("thinking")
+                                    }
+
                                     if llamaState.isGenerating && !llamaState.currentResponse.isEmpty {
                                         StreamingBubble(content: llamaState.currentResponse)
                                             .id("streaming")
                                     }
                                 }
                                 .padding()
+                                .padding(.bottom, 60)
                             }
                             .onChange(of: llamaState.messages.count) { _, _ in
                                 if let lastMessage = llamaState.messages.last {
@@ -101,6 +112,24 @@ struct ContentView: View {
                                 if llamaState.isGenerating {
                                     withAnimation {
                                         proxy.scrollTo("streaming", anchor: .bottom)
+                                    }
+                                }
+                            }
+                            // Fix 5: Scroll to thinking indicator
+                            .onChange(of: llamaState.isThinking) { _, newValue in
+                                if newValue {
+                                    withAnimation {
+                                        proxy.scrollTo("thinking", anchor: .bottom)
+                                    }
+                                }
+                            }
+                            // Fix 8: Scroll to bottom on conversation load
+                            .onChange(of: llamaState.currentConversation?.id) { _, _ in
+                                if let lastMessage = llamaState.messages.last {
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                        withAnimation {
+                                            proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                                        }
                                     }
                                 }
                             }
@@ -124,7 +153,12 @@ struct ContentView: View {
                 .overlay(
                     Color.black
                         .opacity(Double(drawerOffset / drawerWidth) * 0.3)
-                        .allowsHitTesting(false)
+                        .allowsHitTesting(drawerOffset > 0)
+                        .onTapGesture {
+                            withAnimation(.easeOut(duration: 0.25)) {
+                                drawerOffset = 0
+                            }
+                        }
                 )
                 .gesture(
                     DragGesture(minimumDistance: 10)
@@ -168,7 +202,7 @@ struct ContentView: View {
 
     private func sendMessage() {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty, !llamaState.isGenerating else { return }
 
         // Show manage models if no models installed
         if llamaState.downloadedModels.isEmpty {
@@ -177,7 +211,6 @@ struct ContentView: View {
         }
 
         inputText = ""
-        isFocused = false
 
         Task {
             await llamaState.complete(text: text)

@@ -6,7 +6,7 @@ struct DrawerView: View {
     @Binding var showSettings: Bool
     let onClose: () -> Void
     let onNewChat: () -> Void
-    let onSelectConversation: (Conversation) -> Void
+    let onSelectConversation: (ConversationSummary) -> Void
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -200,6 +200,23 @@ struct SettingsView: View {
                                 .foregroundColor(.secondary)
                         }
                     }
+                }
+
+                // MARK: - Context Size Section
+                Section {
+                    Picker(selection: $llamaState.contextSize, label:
+                        Label("Context Size", systemImage: "text.word.spacing")
+                            .foregroundColor(.primary)
+                    ) {
+                        Text("2048").tag(UInt32(2048))
+                        Text("4096").tag(UInt32(4096))
+                        Text("8192").tag(UInt32(8192))
+                        Text("16384").tag(UInt32(16384))
+                    }
+                } footer: {
+                    Text("Larger context allows longer conversations but uses more memory. Model will reload on change.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
 
                 // MARK: - Acknowledgements Section
