@@ -3,12 +3,23 @@ import SwiftUI
 struct HeaderView: View {
     let currentModel: String
     let models: [Model]
+    var isLoadingModel: Bool = false
+    var isDownloading: Bool = false
+    var isGenerating: Bool = false
+    var downloadProgress: Double = 0.0
+    var modelLoadProgress: Double = 0.0
     let onMenuTap: () -> Void
     let onModelSelect: (Model) -> Void
     let onNewChat: () -> Void
     let onManageModels: () -> Void
 
     @State private var showModelPicker = false
+
+    private var headerTitle: String {
+        if isDownloading { return "Downloading..." }
+        if isLoadingModel { return "Loading..." }
+        return truncatedModelName
+    }
 
     private var truncatedModelName: String {
         if currentModel.isEmpty {
@@ -23,42 +34,58 @@ struct HeaderView: View {
     }
 
     var body: some View {
-        HStack {
-            Button(action: onMenuTap) {
-                Image(systemName: "equal")
-                    .font(.system(size: 20))
-                    .foregroundColor(.primary)
-            }
-            .frame(width: 44, height: 44)
-
-            Spacer()
-
-            Button(action: { showModelPicker = true }) {
-                HStack(spacing: 4) {
-                    Text(truncatedModelName)
-                        .font(.headline)
+        VStack(spacing: 0) {
+            HStack {
+                Button(action: onMenuTap) {
+                    Image(systemName: "equal")
+                        .font(.system(size: 20))
                         .foregroundColor(.primary)
-                        .lineLimit(1)
-                    if !currentModel.isEmpty {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 12))
-                            .foregroundColor(.secondary)
+                }
+                .frame(width: 44, height: 44)
+
+                Spacer()
+
+                Button(action: { showModelPicker = true }) {
+                    HStack(spacing: 4) {
+                        Text(headerTitle)
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                        if !currentModel.isEmpty && !isLoadingModel && !isDownloading {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 12))
+                                .foregroundColor(.secondary)
+                        }
                     }
                 }
-            }
-            .disabled(currentModel.isEmpty && !models.isEmpty)
+                .disabled((currentModel.isEmpty && !models.isEmpty) || isGenerating || isLoadingModel || isDownloading)
 
-            Spacer()
+                Spacer()
 
-            Button(action: onNewChat) {
-                Image(systemName: "square.and.pencil")
-                    .font(.system(size: 18))
-                    .foregroundColor(.primary)
+                Button(action: onNewChat) {
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 18))
+                        .foregroundColor(.primary)
+                }
+                .frame(width: 44, height: 44)
             }
-            .frame(width: 44, height: 44)
+            .padding(.horizontal, 8)
+            .frame(height: 52)
+
+            if isDownloading {
+                ProgressView(value: downloadProgress)
+                    .progressViewStyle(.linear)
+                    .tint(.primary)
+                    .padding(.horizontal, 16)
+                    .frame(height: 4)
+            } else if isLoadingModel {
+                ProgressView()
+                    .progressViewStyle(.linear)
+                    .tint(.primary)
+                    .padding(.horizontal, 16)
+                    .frame(height: 4)
+            }
         }
-        .padding(.horizontal, 8)
-        .frame(height: 52)
         .background(Color(.systemBackground))
         .sheet(isPresented: $showModelPicker) {
             ModelPickerSheet(

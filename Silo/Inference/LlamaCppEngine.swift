@@ -6,20 +6,21 @@ actor LlamaCppEngine: InferenceEngine {
 
     init() {}
 
-    func initialize(modelPath: String) async throws {
-        print("LlamaCppEngine: Loading model from \(modelPath)")
-        llamaContext = try LlamaContext.create_context(path: modelPath)
+    func initialize(modelPath: String, contextSize: UInt32, onProgress: (@Sendable (Float) -> Void)? = nil) async throws {
+        print("LlamaCppEngine: Loading model from \(modelPath), context: \(contextSize)")
+        llamaContext = try LlamaContext.create_context(path: modelPath, contextSize: contextSize, onProgress: onProgress)
         print("LlamaCppEngine: Model loaded successfully")
     }
 
-    func generateNext(prompt: String, systemPrompt: String) async throws {
+    func generateNext(messages: [(role: String, content: String)]) async throws {
         guard let context = llamaContext else {
             throw NSError(domain: "LlamaCppEngine", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "Engine not initialized"
             ])
         }
 
-        let finalPrompt = systemPrompt + prompt
+        let finalPrompt = await context.apply_chat_template(messages: messages)
+        print("Formatted prompt:\n\(finalPrompt)")
         await context.completion_init(text: finalPrompt)
         isComplete = false
     }
@@ -63,6 +64,12 @@ actor LlamaCppEngine: InferenceEngine {
 
     func modelInfo() -> String {
         return "GGUF Model (llama.cpp)"
+    }
+
+    func countTokens(for messages: [(role: String, content: String)]) async -> Int {
+        guard let context = llamaContext else { return 0 }
+        let prompt = await context.apply_chat_template(messages: messages)
+        return await context.countTokens(text: prompt)
     }
 
     func deinitialize() async {

@@ -5,6 +5,11 @@ enum LlamaError: Error {
     case couldNotInitializeContext
 }
 
+private class ProgressCallbackContext {
+    let handler: @Sendable (Float) -> Void
+    init(_ handler: @escaping @Sendable (Float) -> Void) { self.handler = handler }
+}
+
 func llama_batch_clear(_ batch: inout llama_batch) {
     batch.n_tokens = 0
 }
@@ -33,20 +38,41 @@ actor LlamaContext {
     /// This variable is used to store temporarily invalid cchars
     private var temporary_invalid_cchars: [CChar]
 
-    var n_len: Int32 = 1024
+    var n_len: Int32
     var n_cur: Int32 = 0
 
     var n_decode: Int32 = 0
+
+    // Reference counting for llama_backend_init/free
+    private static var backendRefCount = 0
+
+    private static func retainBackend() {
+        if backendRefCount == 0 {
+            llama_backend_init()
+        }
+        backendRefCount += 1
+    }
+
+    private static func releaseBackend() {
+        backendRefCount -= 1
+        if backendRefCount == 0 {
+            llama_backend_free()
+        }
+    }
 
     init(model: OpaquePointer, context: OpaquePointer) {
         self.model = model
         self.context = context
         self.tokens_list = []
+        self.n_len = Int32(llama_n_ctx(context))
         self.batch = llama_batch_init(512, 0, 1)
         self.temporary_invalid_cchars = []
         let sparams = llama_sampler_chain_default_params()
         self.sampling = llama_sampler_chain_init(sparams)
-        llama_sampler_chain_add(self.sampling, llama_sampler_init_temp(0.4))
+        llama_sampler_chain_add(self.sampling, llama_sampler_init_top_k(40))
+        llama_sampler_chain_add(self.sampling, llama_sampler_init_temp(0.7))
+        llama_sampler_chain_add(self.sampling, llama_sampler_init_min_p(0.05, 1))
+        llama_sampler_chain_add(self.sampling, llama_sampler_init_penalties(64, 1.1, 0.0, 0.0))
         llama_sampler_chain_add(self.sampling, llama_sampler_init_dist(1234))
         vocab = llama_model_get_vocab(model)
     }
@@ -56,20 +82,41 @@ actor LlamaContext {
         llama_batch_free(batch)
         llama_model_free(model)
         llama_free(context)
-        llama_backend_free()
+        LlamaContext.releaseBackend()
     }
 
-    static func create_context(path: String) throws -> LlamaContext {
-        llama_backend_init()
+    static func create_context(path: String, contextSize: UInt32 = 2048, onProgress: (@Sendable (Float) -> Void)? = nil) throws -> LlamaContext {
+        retainBackend()
         var model_params = llama_model_default_params()
 
 #if targetEnvironment(simulator)
         model_params.n_gpu_layers = 0
         print("Running on simulator, force use n_gpu_layers = 0")
 #endif
+
+        if let onProgress {
+            let ctx = ProgressCallbackContext(onProgress)
+            let rawPtr = Unmanaged.passRetained(ctx).toOpaque()
+            model_params.progress_callback_user_data = rawPtr
+            model_params.progress_callback = { progress, userData in
+                if let userData {
+                    let ctx = Unmanaged<ProgressCallbackContext>.fromOpaque(userData).takeUnretainedValue()
+                    ctx.handler(progress)
+                }
+                return true
+            }
+        }
+
         let model = llama_model_load_from_file(path, model_params)
+
+        // Release retained progress context
+        if let userData = model_params.progress_callback_user_data {
+            Unmanaged<ProgressCallbackContext>.fromOpaque(userData).release()
+        }
+
         guard let model else {
             print("Could not load model at \(path)")
+            releaseBackend()
             throw LlamaError.couldNotInitializeContext
         }
 
@@ -77,13 +124,15 @@ actor LlamaContext {
         print("Using \(n_threads) threads")
 
         var ctx_params = llama_context_default_params()
-        ctx_params.n_ctx = 2048
+        ctx_params.n_ctx = contextSize
         ctx_params.n_threads       = Int32(n_threads)
         ctx_params.n_threads_batch = Int32(n_threads)
 
         let context = llama_init_from_model(model, ctx_params)
         guard let context else {
             print("Could not load context!")
+            llama_model_free(model)
+            releaseBackend()
             throw LlamaError.couldNotInitializeContext
         }
 
@@ -117,7 +166,8 @@ actor LlamaContext {
     func completion_init(text: String) {
         print("attempting to complete \"\(text)\"")
 
-        tokens_list = tokenize(text: text, add_bos: true)
+        is_done = false
+        tokens_list = tokenize(text: text, add_bos: false, parse_special: true)
         temporary_invalid_cchars = []
 
         let n_ctx = llama_n_ctx(context)
@@ -289,17 +339,166 @@ actor LlamaContext {
         return result;
     }
 
+    func apply_chat_template(messages: [(role: String, content: String)], enableThinking: Bool = false) -> String {
+        let modelDesc = model_info().lowercased()
+
+        // SmolLM3 has a complex template that llama_chat_apply_template can't parse
+        if modelDesc.contains("smollm3") || modelDesc.contains("smol") {
+            return apply_smollm3_template(messages: messages, enableThinking: enableThinking)
+        }
+
+        // LFM2.5 Thinking model
+        if modelDesc.contains("lfm") && modelDesc.contains("think") {
+            return apply_chatml_template(messages: messages, thinkingPrefix: true)
+        }
+
+        // Ministral / Mistral models
+        if modelDesc.contains("ministral") || modelDesc.contains("mistral") {
+            return apply_ministral_template(messages: messages)
+        }
+
+        // Default: use llama.cpp's built-in template matching
+        var chat: [llama_chat_message] = []
+        var cStrings: [(UnsafeMutablePointer<CChar>, UnsafeMutablePointer<CChar>)] = []
+
+        for msg in messages {
+            let roleStr = strdup(msg.role)!
+            let contentStr = strdup(msg.content)!
+            cStrings.append((roleStr, contentStr))
+            chat.append(llama_chat_message(role: roleStr, content: contentStr))
+        }
+
+        defer {
+            for (r, c) in cStrings {
+                free(r)
+                free(c)
+            }
+        }
+
+        let needed = llama_chat_apply_template(llama_model_chat_template(model, nil), &chat, chat.count, true, nil, 0)
+
+        if needed > 0 {
+            let bufSize = Int(needed) + 1
+            let buf = UnsafeMutablePointer<CChar>.allocate(capacity: bufSize)
+            buf.initialize(repeating: 0, count: bufSize)
+            defer { buf.deallocate() }
+
+            let result = llama_chat_apply_template(llama_model_chat_template(model, nil), &chat, chat.count, true, buf, Int32(bufSize))
+            if result > 0 {
+                return String(cString: buf)
+            }
+        }
+
+        // Final fallback: basic ChatML
+        return apply_chatml_template(messages: messages, thinkingPrefix: false)
+    }
+
+    private func apply_smollm3_template(messages: [(role: String, content: String)], enableThinking: Bool) -> String {
+        var result = ""
+        let reasoningMode = enableThinking ? "/think" : "/no_think"
+
+        // Build system block with metadata
+        result += "<|im_start|>system\n"
+        result += "## Metadata\n\n"
+        result += "Knowledge Cutoff Date: June 2025\n"
+
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd MMMM yyyy"
+        result += "Today Date: \(formatter.string(from: Date()))\n"
+        result += "Reasoning Mode: \(reasoningMode)\n\n"
+
+        result += "## Custom Instructions\n\n"
+
+        // Extract system message content if present
+        var messageStart = 0
+        if let first = messages.first, first.role == "system" {
+            result += first.content + "\n\n"
+            messageStart = 1
+        } else if enableThinking {
+            result += "You are a helpful AI assistant named SmolLM, trained by Hugging Face. Your role as an assistant involves thoroughly exploring questions through a systematic thinking process before providing the final precise and accurate solutions. This requires engaging in a comprehensive cycle of analysis, summarizing, exploration, reassessment, reflection, backtracking, and iteration to develop well-considered thinking process. Please structure your response into two main sections: Thought and Solution using the specified format: <think> Thought section </think> Solution section. In the Thought section, detail your reasoning process in steps. Each step should include detailed considerations such as analysing questions, summarizing relevant findings, brainstorming new ideas, verifying the accuracy of the current steps, refining any errors, and revisiting previous steps. In the Solution section, based on various attempts, explorations, and reflections from the Thought section, systematically present the final solution that you deem correct. The Solution section should be logical, accurate, and concise and detail necessary steps needed to reach the conclusion.\n\n"
+        } else {
+            result += "You are a helpful AI assistant named SmolLM, trained by Hugging Face.\n\n"
+        }
+        result += "<|im_end|>\n"
+
+        // Append user/assistant messages
+        for i in messageStart..<messages.count {
+            let msg = messages[i]
+            if msg.role == "user" {
+                result += "<|im_start|>user\n\(msg.content)<|im_end|>\n"
+            } else if msg.role == "assistant" {
+                if enableThinking {
+                    result += "<|im_start|>assistant\n\(msg.content)<|im_end|>\n"
+                } else {
+                    result += "<|im_start|>assistant\n<think>\n\n</think>\n\(msg.content)<|im_end|>\n"
+                }
+            }
+        }
+
+        // Generation prompt
+        if enableThinking {
+            result += "<|im_start|>assistant\n"
+        } else {
+            result += "<|im_start|>assistant\n<think>\n\n</think>\n"
+        }
+
+        return result
+    }
+
+    private func apply_ministral_template(messages: [(role: String, content: String)]) -> String {
+        var result = ""
+
+        // BOS token
+        result += "<s>"
+
+        // System prompt
+        var messageStart = 0
+        if let first = messages.first, first.role == "system" {
+            result += "[SYSTEM_PROMPT]" + first.content + "[/SYSTEM_PROMPT]"
+            messageStart = 1
+        }
+
+        // User/assistant messages
+        for i in messageStart..<messages.count {
+            let msg = messages[i]
+            if msg.role == "user" {
+                result += "[INST]\(msg.content)[/INST]"
+            } else if msg.role == "assistant" {
+                result += "\(msg.content)</s>"
+            }
+        }
+
+        return result
+    }
+
+    private func apply_chatml_template(messages: [(role: String, content: String)], thinkingPrefix: Bool) -> String {
+        var result = ""
+        for msg in messages {
+            result += "<|im_start|>\(msg.role)\n\(msg.content)<|im_end|>\n"
+        }
+        result += "<|im_start|>assistant\n"
+        if thinkingPrefix {
+            result += "<think>\n"
+        }
+        return result
+    }
+
+    func countTokens(text: String) -> Int {
+        let tokens = tokenize(text: text, add_bos: false, parse_special: true)
+        return tokens.count
+    }
+
     func clear() {
         tokens_list.removeAll()
         temporary_invalid_cchars.removeAll()
         llama_memory_clear(llama_get_memory(context), true)
     }
 
-    private func tokenize(text: String, add_bos: Bool) -> [llama_token] {
+    private func tokenize(text: String, add_bos: Bool, parse_special: Bool = false) -> [llama_token] {
         let utf8Count = text.utf8.count
         let n_tokens = utf8Count + (add_bos ? 1 : 0) + 1
         let tokens = UnsafeMutablePointer<llama_token>.allocate(capacity: n_tokens)
-        let tokenCount = llama_tokenize(vocab, text, Int32(utf8Count), tokens, Int32(n_tokens), add_bos, false)
+        let tokenCount = llama_tokenize(vocab, text, Int32(utf8Count), tokens, Int32(n_tokens), add_bos, parse_special)
 
         var swiftTokens: [llama_token] = []
         for i in 0..<tokenCount {
