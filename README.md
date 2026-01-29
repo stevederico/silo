@@ -1,6 +1,6 @@
 <div align="center">
   <a href="#" />
-    <img alt="silo" height="200px" src="https://github.com/stevederico/silo/blob/master/Assets.xcassets/AppIcon.appiconset/logo.jpg">
+    <img alt="silo" height="200px" src="https://github.com/stevederico/silo/blob/master/Silo/Assets.xcassets/AppIcon.appiconset/logo.jpg">
   </a>
 </div>
 
