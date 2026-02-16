@@ -29,15 +29,13 @@ absolute privacy and security by keeping all data processing local without any t
 - **Anonymous**: No login or personal information required. There is no usage statistics or tracking, ensuring absolute anonymity.
 - **Fast**: Provides quick answers through local processing for rapid query responses.
 
-## Example
 <div align="center">
   <a href="#" />
-    <img alt="silo" height="600px" src="https://github.com/stevederico/silo/blob/master/example.gif">
+    <img height="600px" alt="screenshot" src="https://github.com/user-attachments/assets/4141936e-7f9e-4df9-bfe5-d6f68aba4d9c" />    
   </a>
 </div>
 
 # Getting Started
-
 - [Download on the App Store](https://apps.apple.com/us/app/silo-private-ai-assistant/id6741248135)
 
 ## Build 
