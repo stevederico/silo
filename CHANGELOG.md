@@ -6,6 +6,12 @@
 - passcode
 - copy and other icons udner message
 
+2.0.2
+
+  Add conversation delete
+  Fix drawer z-index
+  Update conversation row layout
+
 2.0.1
 
   Add thinking indicator

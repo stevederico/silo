@@ -39,10 +39,19 @@ struct ContentView: View {
                         withAnimation(.easeOut(duration: 0.25)) {
                             drawerOffset = 0
                         }
+                    },
+                    onDeleteConversation: { summary in
+                        if summary.id == llamaState.currentConversation?.id {
+                            Task {
+                                await llamaState.clear()
+                            }
+                        }
+                        conversationManager.delete(summary.id)
                     }
                 )
                 .frame(width: drawerWidth)
                 .offset(x: -drawerWidth + drawerOffset)
+                .zIndex(drawerOffset > 0 ? 1 : -1)
 
                 // Main chat view
                 VStack(spacing: 0) {

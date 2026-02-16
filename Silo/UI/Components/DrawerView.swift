@@ -7,6 +7,7 @@ struct DrawerView: View {
     let onClose: () -> Void
     let onNewChat: () -> Void
     let onSelectConversation: (ConversationSummary) -> Void
+    let onDeleteConversation: (ConversationSummary) -> Void
 
     @Environment(\.colorScheme) private var colorScheme
 
@@ -43,7 +44,8 @@ struct DrawerView: View {
                                 title: conversation.displayTitle,
                                 date: conversation.relativeDate,
                                 isSelected: conversation.id == conversationManager.currentConversationId,
-                                action: { onSelectConversation(conversation) }
+                                action: { onSelectConversation(conversation) },
+                                onDelete: { onDeleteConversation(conversation) }
                             )
                         }
                     }
@@ -61,6 +63,7 @@ struct DrawerView: View {
                 }
                 .padding(.vertical, 8)
             }
+            .contentShape(Rectangle())
             .background(Color(.systemBackground))
 
             // Right border
@@ -76,27 +79,41 @@ struct ConversationRow: View {
     let date: String
     var isSelected: Bool = false
     let action: () -> Void
+    var onDelete: (() -> Void)? = nil
 
     var body: some View {
-        Button(action: action) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.subheadline)
-                        .foregroundColor(.primary)
-                        .lineLimit(1)
-                    Text(date)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+        HStack {
+            Button(action: action) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(title)
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                            .lineLimit(1)
+                        Text(date)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    Spacer()
                 }
-                Spacer()
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(isSelected ? Color(.systemGray5) : Color.clear)
-            .cornerRadius(8)
+            .buttonStyle(.plain)
+            if let onDelete {
+                Button(action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(isSelected ? Color(.systemGray5) : Color.clear)
+        .cornerRadius(8)
     }
 }
 
