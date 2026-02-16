@@ -28,13 +28,17 @@ absolute privacy and security by keeping all data processing local without any t
 - **Offline**: Use Silo anytime, anywhere without an internet connection. All information stays on your device; no data is sent to the cloud.
 - **Anonymous**: No login or personal information required. There is no usage statistics or tracking, ensuring absolute anonymity.
 - **Fast**: Provides quick answers through local processing for rapid query responses.
-
-<div align="center">
-  <a href="#" />
-    <img height="600px" alt="screenshot" src="https://github.com/user-attachments/assets/4141936e-7f9e-4df9-bfe5-d6f68aba4d9c" />    
-  </a>
-</div>
-
+  
+  <div align="center">                                                                                                                                              
+    <table cellspacing="0" cellpadding="0" border="0" style="border:none;">
+      <tr>                                                                                                                                                          
+        <td style="border:none;"><img height="600px" alt="screenshot-0" src="https://github.com/user-attachments/assets/9ca234f0-0a36-4768-8e92-76fa7d66a8a8" /></td>                   
+        <td style="border:none;"><img height="600px" alt="screenshot" src="https://github.com/user-attachments/assets/4141936e-7f9e-4df9-bfe5-d6f68aba4d9c" /></td>                                                       
+        <td style="border:none;"><img height="600px" alt="screenshot-2" src="https://github.com/user-attachments/assets/4c43ac51-9f75-437b-823e-3aa5de97ece0" /></td>
+      </tr>
+    </table>
+  </div>
+  
 # Getting Started
 - [Download on the App Store](https://apps.apple.com/us/app/silo-private-ai-assistant/id6741248135)
 
