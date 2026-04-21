@@ -16,21 +16,61 @@ struct HeaderView: View {
     @State private var showModelPicker = false
 
     private var headerTitle: String {
-        if isDownloading { return "Downloading..." }
+        if isDownloading {
+            let pct = Int(downloadProgress * 100)
+            return pct > 0 ? "Downloading \(pct)%" : "Connecting..."
+        }
         if isLoadingModel { return "Loading..." }
         return truncatedModelName
     }
 
     private var truncatedModelName: String {
         if currentModel.isEmpty {
-            // Only show "No Model" if no models are installed
             return models.isEmpty ? "No Model" : ""
         }
-        let capitalized = currentModel.prefix(1).uppercased() + currentModel.dropFirst()
-        if capitalized.count > 15 {
-            return String(capitalized.prefix(15)) + "..."
+        return Self.parseModelDisplayName(currentModel)
+    }
+
+    /// Parse a GGUF filename into a clean display name.
+    /// "gemma-4-E2B-it-Q4_K_M" -> "Gemma 4"
+    /// "SmolLM3-3B-Q4_K_M" -> "SmolLM3"
+    /// "LFM2.5-1.2B-Instruct-Q8_0" -> "LFM2.5"
+    /// "Ministral-3B-Instruct-Q4_K_M" -> "Ministral"
+    static func parseModelDisplayName(_ filename: String) -> String {
+        // Quantization suffixes to strip
+        let quantPatterns = [
+            "-Q[0-9]+_K_[A-Z]+", "-Q[0-9]+_[0-9]+", "-Q[0-9]+",
+            "-F[0-9]+", "-IQ[0-9]+_[A-Z]+"
+        ]
+        var name = filename
+        for pattern in quantPatterns {
+            if let range = name.range(of: pattern, options: .regularExpression) {
+                name = String(name[..<range.lowerBound])
+            }
         }
-        return capitalized
+
+        // Strip common suffixes that aren't part of the model identity
+        let stripSuffixes = ["-it", "-Instruct", "-instruct", "-Reasoning", "-reasoning", "-Thinking", "-thinking", "-Chat", "-chat"]
+        for suffix in stripSuffixes {
+            if name.hasSuffix(suffix) {
+                name = String(name.dropLast(suffix.count))
+            }
+        }
+
+        // Strip size labels (e.g. -3B, -1.2B, -E2B, -7B, -4.6B)
+        if let range = name.range(of: "-[0-9A-E.]*B$", options: .regularExpression) {
+            name = String(name[..<range.lowerBound])
+        }
+
+        // Replace hyphens with spaces
+        name = name.replacingOccurrences(of: "-", with: " ")
+
+        // Capitalize first letter
+        if let first = name.first {
+            name = first.uppercased() + name.dropFirst()
+        }
+
+        return name
     }
 
     var body: some View {
@@ -74,12 +114,6 @@ struct HeaderView: View {
 
             if isDownloading {
                 ProgressView(value: downloadProgress)
-                    .progressViewStyle(.linear)
-                    .tint(.primary)
-                    .padding(.horizontal, 16)
-                    .frame(height: 4)
-            } else if isLoadingModel {
-                ProgressView()
                     .progressViewStyle(.linear)
                     .tint(.primary)
                     .padding(.horizontal, 16)

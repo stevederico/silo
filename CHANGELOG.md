@@ -6,6 +6,18 @@
 - passcode
 - copy and other icons udner message
 
+2.1.0
+
+  Add streaming markdown
+  Add Gemma 4 support
+  Add Phi-4 Mini support
+  Add privacy manifest
+  Add corrupt file detection
+  Add download persistence
+  Update llama.cpp engine
+  Update recommended models
+  Rewrite README
+
 2.0.2
 
   Add conversation delete

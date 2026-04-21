@@ -46,7 +46,11 @@ class SpecialTokenFilter {
         "<|im_end|>", "<|im_start|>assistant", "<|im_start|>user",
         "<|im_start|>system", "<|im_start|>", "<|endoftext|>",
         "<|end_of_text|>", "</s>", "<s>", "[INST]", "[/INST]",
-        "[SYSTEM_PROMPT]", "[/SYSTEM_PROMPT]"
+        "[SYSTEM_PROMPT]", "[/SYSTEM_PROMPT]",
+        "<end_of_turn>", "<start_of_turn>model", "<start_of_turn>user",
+        "<start_of_turn>system", "<start_of_turn>", "<bos>",
+        "<turn|>", "<|turn>model", "<|turn>user", "<|turn>system", "<|turn>",
+        "<eos>", "<|tool_response>"
     ]
 
     private static let maxTokenLength: Int = {
@@ -258,6 +262,7 @@ class LlamaState: ObservableObject {
     @Published var cacheCleared = false
     @Published var contextTruncated = false
     @Published var isThinking = false
+    @Published var modelConfidence: Float = 1.0
     @Published var contextSize: UInt32 {
         didSet {
             UserDefaults.standard.set(Int(contextSize), forKey: "contextSize")
@@ -270,6 +275,105 @@ class LlamaState: ObservableObject {
     @Published var downloadedModels: [Model] = []
     @Published var undownloadedModels: [Model] = []
     @Published var currentConversation: Conversation?
+
+    // Active download tracking — persists across modal dismiss/re-present
+    @Published var activeDownloads: [String: Double] = [:]  // filename -> progress
+    var downloadTasks: [String: URLSessionDownloadTask] = [:]
+    var downloadObservations: [String: NSKeyValueObservation] = [:]
+
+    // Pending download metadata — maps filename to (modelName, modelUrl) for background session reconnection
+    private var pendingDownloadMeta: [String: (name: String, url: String)] = [:]
+
+    func startDownload(modelName: String, modelUrl: String, filename: String) {
+        guard let url = URL(string: modelUrl) else { return }
+        let fileURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent(filename)
+
+        // Remove any leftover partial file
+        try? FileManager.default.removeItem(at: fileURL)
+
+        activeDownloads[filename] = 0.0
+        pendingDownloadMeta[filename] = (name: modelName, url: modelUrl)
+
+        let task = URLSession.shared.downloadTask(with: url) { [weak self] temporaryURL, response, error in
+            if let error = error as? NSError, error.code == NSURLErrorCancelled {
+                Task { @MainActor [weak self] in
+                    self?.cleanupDownload(filename: filename)
+                }
+                return
+            }
+
+            if let error = error {
+                print("Download error: \(error.localizedDescription)")
+                Task { @MainActor [weak self] in
+                    self?.cleanupDownload(filename: filename)
+                }
+                return
+            }
+
+            guard let response = response as? HTTPURLResponse, (200...299).contains(response.statusCode) else {
+                print("Server error")
+                Task { @MainActor [weak self] in
+                    self?.cleanupDownload(filename: filename)
+                }
+                return
+            }
+
+            do {
+                if let temporaryURL = temporaryURL {
+                    try FileManager.default.copyItem(at: temporaryURL, to: fileURL)
+
+                    // Validate file is at least 1MB (a real GGUF is always bigger)
+                    let attrs = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+                    let size = attrs[.size] as? Int64 ?? 0
+                    if size < 1_000_000 {
+                        try FileManager.default.removeItem(at: fileURL)
+                        print("Downloaded file too small, likely corrupt — removed")
+                        Task { @MainActor [weak self] in
+                            self?.cleanupDownload(filename: filename)
+                        }
+                        return
+                    }
+
+                    print("Writing to \(filename) completed (\(size) bytes)")
+
+                    Task { @MainActor [weak self] in
+                        self?.cleanupDownload(filename: filename)
+                        self?.cacheCleared = false
+                        let model = Model(name: modelName, url: modelUrl, filename: filename, status: "downloaded")
+                        self?.downloadedModels.append(model)
+                    }
+                }
+            } catch {
+                print("File error: \(error.localizedDescription)")
+                try? FileManager.default.removeItem(at: fileURL)
+                Task { @MainActor [weak self] in
+                    self?.cleanupDownload(filename: filename)
+                }
+            }
+        }
+
+        let observation = task.progress.observe(\.fractionCompleted) { [weak self] progress, _ in
+            Task { @MainActor [weak self] in
+                self?.activeDownloads[filename] = progress.fractionCompleted
+            }
+        }
+
+        downloadTasks[filename] = task
+        downloadObservations[filename] = observation
+        task.resume()
+    }
+
+    func cancelDownload(filename: String) {
+        downloadTasks[filename]?.cancel()
+        cleanupDownload(filename: filename)
+    }
+
+    private func cleanupDownload(filename: String) {
+        downloadTasks.removeValue(forKey: filename)
+        downloadObservations.removeValue(forKey: filename)
+        activeDownloads.removeValue(forKey: filename)
+        pendingDownloadMeta.removeValue(forKey: filename)
+    }
 
     private var inferenceEngine: InferenceEngine?
     var conversationManager: ConversationManager?
@@ -284,8 +388,7 @@ class LlamaState: ObservableObject {
     private var thinkStripper = ThinkTagStripper()
 
     init() {
-        self.systemPrompt = UserDefaults.standard.string(forKey: "systemPrompt")
-            ?? "You are a brutally concise assistant. Respond with only essential information. No pleasantries, no fluff, no rambling. Your response should be under 50 words. "
+        self.systemPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? ""
         let saved = UserDefaults.standard.integer(forKey: "contextSize")
         self.contextSize = saved > 0 ? UInt32(saved) : 4096
         loadModelsFromDisk()
@@ -298,6 +401,14 @@ class LlamaState: ObservableObject {
             let allURLs = try FileManager.default.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants])
             let modelURLs = allURLs.filter { $0.pathExtension.lowercased() == "gguf" }
             for modelURL in modelURLs {
+                // Skip files under 1MB — likely corrupt or partial
+                let attrs = try? FileManager.default.attributesOfItem(atPath: modelURL.path)
+                let size = attrs?[.size] as? Int64 ?? 0
+                if size < 1_000_000 {
+                    try? FileManager.default.removeItem(at: modelURL)
+                    print("Removed corrupt/partial model: \(modelURL.lastPathComponent) (\(size) bytes)")
+                    continue
+                }
                 let modelName = modelURL.deletingPathExtension().lastPathComponent
                 downloadedModels.append(Model(name: modelName, url: "", filename: modelURL.lastPathComponent, status: "downloaded"))
             }
@@ -308,8 +419,6 @@ class LlamaState: ObservableObject {
                 } catch {
                     print("Error loading model")
                 }
-            } else {
-                downloadDefaultModel()
             }
         } catch {
             print("Error loading models from disk: \(error)")
@@ -332,6 +441,7 @@ class LlamaState: ObservableObject {
 
     @Published var isDownloadingDefault = false
     @Published var defaultDownloadProgress = 0.0
+    private var defaultDownloadObservation: NSKeyValueObservation?
 
     private func downloadDefaultModel() {
         let model = LlamaState.defaultModel
@@ -343,13 +453,13 @@ class LlamaState: ObservableObject {
         let task = URLSession.shared.downloadTask(with: url) { [weak self] temporaryURL, response, error in
             if let error = error {
                 print("Default model download error: \(error.localizedDescription)")
-                Task { @MainActor in self?.isDownloadingDefault = false }
+                Task { @MainActor in self?.finishDefaultDownload() }
                 return
             }
 
             guard let response = response as? HTTPURLResponse, (200...299).contains(response.statusCode) else {
                 print("Default model download server error")
-                Task { @MainActor in self?.isDownloadingDefault = false }
+                Task { @MainActor in self?.finishDefaultDownload() }
                 return
             }
 
@@ -360,7 +470,7 @@ class LlamaState: ObservableObject {
 
                     Task { @MainActor [weak self] in
                         guard let self else { return }
-                        self.isDownloadingDefault = false
+                        self.finishDefaultDownload()
                         self.downloadedModels.append(Model(name: model.name, url: model.url, filename: model.filename, status: "downloaded"))
                         self.undownloadedModels.removeAll { $0.filename == model.filename }
                         try? self.loadModel(modelUrl: fileURL)
@@ -368,11 +478,11 @@ class LlamaState: ObservableObject {
                 }
             } catch {
                 print("Default model save error: \(error.localizedDescription)")
-                Task { @MainActor in self?.isDownloadingDefault = false }
+                Task { @MainActor in self?.finishDefaultDownload() }
             }
         }
 
-        task.progress.observe(\.fractionCompleted) { [weak self] progress, _ in
+        defaultDownloadObservation = task.progress.observe(\.fractionCompleted) { [weak self] progress, _ in
             Task { @MainActor in
                 self?.defaultDownloadProgress = progress.fractionCompleted
             }
@@ -381,15 +491,21 @@ class LlamaState: ObservableObject {
         task.resume()
     }
 
+    private func finishDefaultDownload() {
+        isDownloadingDefault = false
+        defaultDownloadProgress = 0.0
+        defaultDownloadObservation = nil
+    }
+
     func getDocumentsDirectory() -> URL {
         let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
         return paths[0]
     }
 
     static let defaultModel = Model(
-        name: "SmolLM3-3B Q4 (1.9 GiB)",
-        url: "https://huggingface.co/ggml-org/SmolLM3-3B-GGUF/resolve/main/SmolLM3-Q4_K_M.gguf?download=true",
-        filename: "SmolLM3-Q4_K_M.gguf", status: "download")
+        name: "SmolLM3-3B Q4 (1.8 GiB)",
+        url: "https://huggingface.co/unsloth/SmolLM3-3B-GGUF/resolve/main/SmolLM3-3B-Q4_K_M.gguf?download=true",
+        filename: "SmolLM3-3B-Q4_K_M.gguf", status: "download")
 
     private let downloadableModels: [Model] = [
         LlamaState.defaultModel,
@@ -408,7 +524,15 @@ class LlamaState: ObservableObject {
 
         Model(name: "Ministral-3B Reasoning Q4 (2.2 GiB)",
               url: "https://huggingface.co/mistralai/Ministral-3-3B-Reasoning-2512-GGUF/resolve/main/Ministral-3-3B-Reasoning-2512-Q4_K_M.gguf?download=true",
-              filename: "Ministral-3-3B-Reasoning-2512-Q4_K_M.gguf", status: "download")
+              filename: "Ministral-3-3B-Reasoning-2512-Q4_K_M.gguf", status: "download"),
+
+        Model(name: "Gemma 4 E2B Instruct Q4 (2.9 GiB)",
+              url: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf?download=true",
+              filename: "gemma-4-E2B-it-Q4_K_M.gguf", status: "download"),
+
+        Model(name: "Gemma 4 E2B Instruct Q8 (4.6 GiB)",
+              url: "https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q8_0.gguf?download=true",
+              filename: "gemma-4-E2B-it-Q8_0.gguf", status: "download")
     ]
 
     private func reloadCurrentModel() {
@@ -516,7 +640,7 @@ class LlamaState: ObservableObject {
             }
 
             // Context overflow handling
-            let budget = Int(Double(contextSize) * 0.75)
+            let budget = Int(Double(contextSize) * 0.95)
             var currentTokenCount = (try? await inferenceEngine.countTokens(for: chatMessages)) ?? 0
             var trimmed = false
             while currentTokenCount > budget && chatMessages.count > 1 {
@@ -552,7 +676,7 @@ class LlamaState: ObservableObject {
 
             try await inferenceEngine.generateNext(messages: chatMessages)
 
-            while await !inferenceEngine.isComplete {
+            while await !inferenceEngine.isComplete && !isStopped {
                 if let token = try? await inferenceEngine.streamToken() {
                     rawResponseParts.append(token)
                     let filtered = tokenFilter.process(token)
@@ -567,11 +691,20 @@ class LlamaState: ObservableObject {
                             if needsImmediateUpdate || displayPartsSinceLastFlush >= 10 {
                                 let snapshot = displayParts.joined()
                                 displayPartsSinceLastFlush = 0
+                                // Read entropy for confidence indicator
+                                var confidence: Float = 1.0
+                                if let cppEngine = inferenceEngine as? LlamaCppEngine {
+                                    let avg = await cppEngine.averageEntropy
+                                    // Map entropy to 0-1 confidence (lower entropy = higher confidence)
+                                    // Typical entropy range: 0-12 bits for 32K vocab
+                                    confidence = max(0, min(1, 1.0 - (avg / 12.0)))
+                                }
                                 await MainActor.run {
                                     if self.isThinking {
                                         self.isThinking = false
                                     }
                                     self.currentResponse = snapshot
+                                    self.modelConfidence = confidence
                                 }
                             }
                         }
@@ -590,7 +723,12 @@ class LlamaState: ObservableObject {
                 displayParts.append(displayFlush)
             }
 
-            await inferenceEngine.clear()
+            // Keep KV cache for prefix reuse on next turn
+            if let cppEngine = inferenceEngine as? LlamaCppEngine {
+                await cppEngine.clearGenerationState()
+            } else {
+                await inferenceEngine.clear()
+            }
 
             rawResponse = rawResponseParts.joined()
             let savedRaw = rawResponse
@@ -605,9 +743,9 @@ class LlamaState: ObservableObject {
                 self.saveCurrentConversation()
             }
 
-            // Fix 11: Reset isThinking before generateTitle so it doesn't persist
             await MainActor.run {
                 self.isThinking = false
+                self.isGenerating = false
             }
 
             // Generate title after first exchange (user + assistant = 2 messages)
@@ -616,10 +754,6 @@ class LlamaState: ObservableObject {
                     userMessage: text,
                     assistantMessage: savedRaw
                 )
-            }
-
-            await MainActor.run {
-                self.isGenerating = false
             }
         } catch {
             await MainActor.run {

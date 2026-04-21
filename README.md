@@ -1,91 +1,140 @@
 <div align="center">
-  <a href="#" />
-    <img alt="silo" height="200px" src="https://github.com/stevederico/silo/blob/master/Silo/Assets.xcassets/AppIcon.appiconset/logo.jpg">
-  </a>
+  <img src="Silo/Assets.xcassets/AppIcon.appiconset/logo.jpg" width="120" alt="Silo" />
+
+# Silo
+
+### private on-device ai chat for ios — llama.cpp, metal gpu, gguf models, no cloud
+
+[Available on the App Store](https://apps.apple.com/us/app/silo-private-ai-assistant/id6741248135)
+
 </div>
 
-<h3 align="center">silo</h3>
+<br />
 
-<p align="center">
-  a private ai assistant for iOS
-  <br>
-  <p align="center">
-  <a href="https://opensource.org/licenses/mit">
-    <img src="https://img.shields.io/badge/License-MIT-blue.svg">
-  </a>
-</p>
+## 📱 Demo
 
+<div align="center">
+  <img src="demo.png" width="75%" alt="Silo on iPhone" />
+</div>
 
+<br />
 
-# silo
+## 🚀 Quick Start
 
-silo is a privacy-first application that allows you to chat with Large Language Models (LLMs) locally on your device. It ensures 
-absolute privacy and security by keeping all data processing local without any tracking or monitoring. [Available on the App Store](https://apps.apple.com/us/app/silo-private-ai-assistant/id6741248135)
+```bash
+git clone https://github.com/stevederico/silo.git
+cd silo
+cd /tmp && git clone https://github.com/ggml-org/llama.cpp.git
+cd llama.cpp && ./build-xcframework.sh
+cp -R build-apple/llama.xcframework <path-to-silo>/
+open Silo.xcodeproj
+```
 
-## Features
-- **LLM Chat**: Works with Open-Source LLM models like Llama, Mistral, Smol, Phi, and even custom GGUF models from Hugging Face.
-- **Secure**: Chat with LLM models locally, ensuring no data leaves your device. Your messages are private and cannot be seen by anyone, including us.
-- **Offline**: Use Silo anytime, anywhere without an internet connection. All information stays on your device; no data is sent to the cloud.
-- **Anonymous**: No login or personal information required. There is no usage statistics or tracking, ensuring absolute anonymity.
-- **Fast**: Provides quick answers through local processing for rapid query responses.
-  
-  <div align="center">                                                                                                                                              
-    <table cellspacing="0" cellpadding="0" border="0" style="border:none;">
-      <tr>                                                                                                                                                          
-        <td style="border:none;"><img height="600px" alt="screenshot-0" src="https://github.com/user-attachments/assets/9ca234f0-0a36-4768-8e92-76fa7d66a8a8" /></td>                   
-        <td style="border:none;"><img height="600px" alt="screenshot" src="https://github.com/user-attachments/assets/4141936e-7f9e-4df9-bfe5-d6f68aba4d9c" /></td>                                                       
-        <td style="border:none;"><img height="600px" alt="screenshot-2" src="https://github.com/user-attachments/assets/4c43ac51-9f75-437b-823e-3aa5de97ece0" /></td>
-      </tr>
-    </table>
-  </div>
-  
-# Getting Started
-- [Download on the App Store](https://apps.apple.com/us/app/silo-private-ai-assistant/id6741248135)
+Build and run on an iPhone or simulator running iOS 18.2+.
 
-## Build 
-### Prerequisites
-- Xcode installed on macOS
+<br />
 
-### Installation
+## ✨ Features
 
-1. Clone the repository:
-   ```sh
-   git clone https://github.com/stevederico/silo.git
-   cd silo
-   ```
+### 🔒 **Privacy**
+- **Zero network requests** — inference runs entirely on device
+- **No accounts** — no login, no email, no signup
+- **No tracking** — no analytics, no telemetry, no data collection
+- **Works offline** — airplane mode, subway, off-grid
 
-2. Build and run the project on your device or simulator.
+### 🧠 **Models**
+- **Gemma 4 E2B** from Google (Q4 and Q8)
+- **Phi-4 Mini** from Microsoft
+- **Mistral / Ministral 3B** Instruct and Reasoning
+- **LFM 2.5** from Liquid AI with thinking mode
+- **SmolLM3 3B** multilingual from HuggingFace
+- **Bring your own GGUF** from any Hugging Face URL
 
-### Usage
-1. Open the Silo application.
-2. Tap Settings => Download a model. i.e llama3.2-3B
-3. Tap Load Model and Enjoy instant AI assistance without compromising your privacy.
+### 💬 **Chat**
+- **Streaming markdown** with bold, headers, code blocks, nested lists
+- **Conversation history** stored locally, never uploaded
+- **Uncensored** — the model answers, the app does not filter
+- **System prompt editor** for custom behavior
 
-## Contributing
+### ⚡ **Performance**
+- **Metal GPU acceleration** via llama.cpp
+- **BF16 compute** on supported hardware
+- **Actor-isolated inference** — thread-safe, single model loaded at a time
+- **Download resume** and corrupt file detection
 
-We welcome contributions from the community! Please follow these guidelines:
+<br />
 
-1. Fork the repository.
-2. Create a new branch for your feature or bug fix:
-   ```sh
-   git checkout -b feature/your-feature-name
-   ```
-3. Make your changes and commit them with descriptive messages.
-4. Push your branch to your fork:
-   ```sh
-   git push origin feature/your-feature-name
-   ```
-5. Open a pull request against the `master` branch.
+## 🧩 Architecture
 
-## License
+Swift actor wraps llama.cpp for thread-safe inference. One model loaded at a time. Backend ref counting prevents double-init. Model-specific chat templates fall back to `llama_chat_apply_template()` then ChatML. Streaming output passes through `SpecialTokenFilter` and `ThinkTagStripper` before rendering in a memoized block-level markdown view.
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+```
+Silo/
+├── Inference/     # LibLlama actor, engine protocol, format detector
+├── UI/            # ContentView, LlamaState, ConversationManager
+│   └── Components # MessageBubble, MarkdownText, DrawerView, HeaderView
+└── SiloApp.swift
+```
 
-### Acknowledgements 
+<br />
 
-- Based on [llama.cpp](https://github.com/ggerganov/llama.cpp) project founded by Georgi Gerganov.
+## 🛠️ Tech Stack
 
-## Contact
+| Technology | Version | Purpose |
+|---|---|---|
+| **Swift / SwiftUI** | 5.9+ | UI and app lifecycle |
+| **llama.cpp** | latest | GGUF inference engine |
+| **Metal** | — | GPU acceleration |
+| **iOS** | 18.2+ | Minimum deployment target |
 
-For any questions or support, please open an issue in this repository.
+<br />
 
+## 🧪 Build
+
+```bash
+xcodebuild -project Silo.xcodeproj -scheme Silo \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
+```
+
+`llama.xcframework` is gitignored. Rebuild from source when adding support for new model architectures.
+
+<br />
+
+## 🤝 Contributing
+
+```bash
+git clone https://github.com/stevederico/silo.git
+cd silo
+open Silo.xcodeproj
+```
+
+Open an issue before large changes. Keep PRs scoped. Set your own `DEVELOPMENT_TEAM` and `PRODUCT_BUNDLE_IDENTIFIER` before building on a device.
+
+<br />
+
+## 🌍 Community
+
+- **X:** [@stevederico](https://x.com/stevederico)
+- **Issues:** [github.com/stevederico/silo/issues](https://github.com/stevederico/silo/issues)
+
+<br />
+
+## 🙏 Acknowledgements
+
+- [llama.cpp](https://github.com/ggml-org/llama.cpp) — inference engine
+- [Unsloth](https://huggingface.co/unsloth) — quantized model releases
+- [Hugging Face](https://huggingface.co) — model hosting
+
+<br />
+
+## 📄 License
+
+[MIT License](LICENSE)
+
+<br />
+
+<div align="center">
+  Built with Swift, llama.cpp, and Metal.
+  <br />
+  ⭐ Star this repo if Silo keeps your conversations private.
+</div>
