@@ -236,6 +236,20 @@ struct SettingsView: View {
                         .foregroundColor(.secondary)
                 }
 
+                // MARK: - Legal Section
+                Section {
+                    Link(destination: URL(string: "https://example.com/privacy")!) {
+                        HStack {
+                            Label("Privacy Policy", systemImage: "hand.raised")
+                                .foregroundColor(.primary)
+                            Spacer()
+                            Image(systemName: "arrow.up.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+
                 // MARK: - Acknowledgements Section
                 Section {
                     DisclosureGroup {
@@ -244,21 +258,32 @@ struct SettingsView: View {
                             url: "https://github.com/ggerganov/llama.cpp/blob/master/LICENSE"
                         )
                         AcknowledgementLink(
-                            title: "Meta Llama (Llama 3 Community License)",
-                            url: "https://www.llama.com/llama3/license/"
+                            title: "SmolLM3 (Apache 2.0 License)",
+                            url: "https://huggingface.co/HuggingFaceTB/SmolLM3-3B/blob/main/LICENSE"
                         )
                         AcknowledgementLink(
-                            title: "Phi-3.5-mini (MIT License)",
-                            url: "https://huggingface.co/microsoft/Phi-3.5-mini-instruct/blob/main/LICENSE"
+                            title: "Gemma 4 (Gemma License)",
+                            url: "https://ai.google.dev/gemma/terms"
                         )
                         AcknowledgementLink(
-                            title: "Smol2 (Apache 2.0 License)",
-                            url: "https://huggingface.co/HuggingFaceTB/SmolLM2-360M-Instruct/tree/main"
+                            title: "Ministral (Mistral Community License)",
+                            url: "https://mistral.ai/licenses/MCL-0.1.md"
+                        )
+                        AcknowledgementLink(
+                            title: "LFM2.5 (Liquid AI License)",
+                            url: "https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF/blob/main/LICENSE"
                         )
                     } label: {
                         Label("Open Source Licenses", systemImage: "doc.text")
                             .foregroundColor(.primary)
                     }
+                }
+
+                // MARK: - Disclaimer Section
+                Section {
+                    Text("AI models may generate inaccurate, biased, or inappropriate content. All responses are produced on-device and are not reviewed or filtered.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
             }
             .navigationTitle("Settings")

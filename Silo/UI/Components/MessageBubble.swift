@@ -30,7 +30,7 @@ struct MessageBubble: View {
                     )
                     .frame(maxWidth: 280, alignment: .trailing)
             } else {
-                Text(isStreaming ? streamingContent : message.displayContent)
+                MarkdownText(text: isStreaming ? streamingContent : message.displayContent, isStreaming: isStreaming)
                     .foregroundColor(.primary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -43,9 +43,15 @@ struct StreamingBubble: View {
 
     var body: some View {
         HStack {
-            Text(content.isEmpty ? " " : content)
-                .foregroundColor(.primary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            if content.isEmpty {
+                Text(" ")
+                    .foregroundColor(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                MarkdownText(text: content, isStreaming: true)
+                    .foregroundColor(.primary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 }

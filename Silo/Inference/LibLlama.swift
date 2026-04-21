@@ -43,6 +43,15 @@ actor LlamaContext {
 
     var n_decode: Int32 = 0
 
+    // Entropy monitoring
+    private var entropyWindow: [Float] = []
+    private let entropyWindowSize = 10
+    var currentEntropy: Float = 0.0
+    var averageEntropy: Float = 0.0
+
+    // Prefix cache reuse
+    private var previousTokens: [llama_token] = []
+
     // Reference counting for llama_backend_init/free
     private static var backendRefCount = 0
 
@@ -121,12 +130,15 @@ actor LlamaContext {
         }
 
         let n_threads = max(1, min(8, ProcessInfo.processInfo.processorCount - 2))
-        print("Using \(n_threads) threads")
+        // print("Using \(n_threads) threads")
 
         var ctx_params = llama_context_default_params()
         ctx_params.n_ctx = contextSize
         ctx_params.n_threads       = Int32(n_threads)
         ctx_params.n_threads_batch = Int32(n_threads)
+        // Note: KV cache quantization (type_k/type_v = Q8_0) requires flash_attn,
+        // which crashes on Gemma 4's mixed SWA architecture. Left as defaults until
+        // llama.cpp fixes flash attention for models with varying head dimensions.
 
         let context = llama_init_from_model(model, ctx_params)
         guard let context else {
@@ -164,47 +176,164 @@ actor LlamaContext {
     }
 
     func completion_init(text: String) {
-        print("attempting to complete \"\(text)\"")
-
         is_done = false
         tokens_list = tokenize(text: text, add_bos: false, parse_special: true)
         temporary_invalid_cchars = []
 
-        let n_ctx = llama_n_ctx(context)
-        let n_kv_req = tokens_list.count + (Int(n_len) - tokens_list.count)
+        let chunkSize = 512
+        for chunkStart in stride(from: 0, to: tokens_list.count, by: chunkSize) {
+            let chunkEnd = min(chunkStart + chunkSize, tokens_list.count)
 
-        print("\n n_len = \(n_len), n_ctx = \(n_ctx), n_kv_req = \(n_kv_req)")
+            llama_batch_clear(&batch)
 
-        if n_kv_req > n_ctx {
-            print("error: n_kv_req > n_ctx, the required KV cache size is not big enough")
+            for i in chunkStart..<chunkEnd {
+                let isLastToken = (i == tokens_list.count - 1)
+                llama_batch_add(&batch, tokens_list[i], Int32(i), [0], isLastToken)
+            }
+
+            if llama_decode(context, batch) != 0 {
+                print("llama_decode() failed at chunk starting at position \(chunkStart)")
+                return
+            }
         }
 
-        for id in tokens_list {
-            print(String(cString: token_to_piece(token: id) + [0]))
+        n_cur = Int32(tokens_list.count)
+    }
+
+    private let sinkTokens: Int32 = 4
+
+    /// Compact KV cache when context is nearly full.
+    /// Keeps sink tokens (first N) and recent tokens, removes the middle.
+    @discardableResult
+    func applyContextWindow() -> Bool {
+        let n_ctx = Int32(llama_n_ctx(context))
+        let usedPositions = n_cur
+        guard usedPositions > (n_ctx * 3 / 4) else { return false }
+
+        let keepRecent = n_ctx / 2
+        let removeFrom = sinkTokens
+        let removeTo = usedPositions - keepRecent
+        guard removeTo > removeFrom else { return false }
+
+        let memory = llama_get_memory(context)
+
+        // Remove middle section of KV cache
+        llama_memory_seq_rm(memory, 0, removeFrom, removeTo)
+
+        // Shift remaining tokens' positions down
+        let shift = removeTo - removeFrom
+        llama_memory_seq_add(memory, 0, removeTo, -1, -shift)
+
+        n_cur -= shift
+
+        // Update previousTokens to reflect compacted state
+        if previousTokens.count > Int(sinkTokens) + Int(keepRecent) {
+            let sinkPart = Array(previousTokens.prefix(Int(sinkTokens)))
+            let recentCount = min(Int(keepRecent), previousTokens.count - Int(sinkTokens))
+            let recentPart = Array(previousTokens.suffix(recentCount))
+            previousTokens = sinkPart + recentPart
         }
 
-        llama_batch_clear(&batch)
+        // print("Sliding window: removed \(shift) tokens, n_cur now \(n_cur)")
+        return true
+    }
 
-        for i1 in 0..<tokens_list.count {
-            let i = Int(i1)
-            llama_batch_add(&batch, tokens_list[i], Int32(i), [0], false)
+    func completion_init_with_cache(text: String) {
+        is_done = false
+        let newTokens = tokenize(text: text, add_bos: false, parse_special: true)
+        temporary_invalid_cchars = []
+        entropyWindow.removeAll()
+
+        // Apply sliding window if context is getting full
+        let n_ctx = Int32(llama_n_ctx(context))
+        let projectedUsage = Int32(newTokens.count) + 256
+        if projectedUsage > n_ctx {
+            applyContextWindow()
         }
-        batch.logits[Int(batch.n_tokens) - 1] = 1 // true
 
-        if llama_decode(context, batch) != 0 {
-            print("llama_decode() failed")
+        // Find common prefix length between previous and new tokens
+        var commonLen = 0
+        let maxCommon = min(previousTokens.count, newTokens.count)
+        for i in 0..<maxCommon {
+            if previousTokens[i] == newTokens[i] {
+                commonLen += 1
+            } else {
+                break
+            }
         }
 
-        n_cur = batch.n_tokens
+        // print("Prefix cache: \(commonLen) tokens reused out of \(newTokens.count) total (\(previousTokens.count) previous)")
+
+        // Remove KV cache entries after the common prefix
+        if commonLen < previousTokens.count {
+            let memory = llama_get_memory(context)
+            llama_memory_seq_rm(memory, 0, Int32(commonLen), -1)
+        }
+
+        // Decode only new tokens after the common prefix (chunked)
+        let newStart = commonLen
+        if newStart < newTokens.count {
+            let chunkSize = 512
+            for chunkStart in stride(from: newStart, to: newTokens.count, by: chunkSize) {
+                let chunkEnd = min(chunkStart + chunkSize, newTokens.count)
+
+                llama_batch_clear(&batch)
+
+                for i in chunkStart..<chunkEnd {
+                    let isLastToken = (i == newTokens.count - 1)
+                    llama_batch_add(&batch, newTokens[i], Int32(i), [0], isLastToken)
+                }
+
+                if llama_decode(context, batch) != 0 {
+                    print("llama_decode() failed during cached init at position \(chunkStart)")
+                    return
+                }
+            }
+        } else if !newTokens.isEmpty {
+            // All tokens cached — still need logits for last token
+            llama_batch_clear(&batch)
+            llama_batch_add(&batch, newTokens[newTokens.count - 1], Int32(newTokens.count - 1), [0], true)
+            if llama_decode(context, batch) != 0 {
+                print("llama_decode() failed during logit refresh")
+            }
+        }
+
+        tokens_list = newTokens
+        previousTokens = newTokens
+        n_cur = Int32(newTokens.count)
     }
 
     func completion_loop() -> String {
         var new_token_id: llama_token = 0
 
+        // Compute entropy from logits before sampling
+        let nVocab = llama_vocab_n_tokens(vocab)
+        if let logits = llama_get_logits_ith(context, batch.n_tokens - 1) {
+            var maxLogit: Float = -Float.infinity
+            for i in 0..<Int(nVocab) {
+                if logits[i] > maxLogit { maxLogit = logits[i] }
+            }
+            var sumExp: Float = 0
+            for i in 0..<Int(nVocab) {
+                sumExp += exp(logits[i] - maxLogit)
+            }
+            let logSumExp = log(sumExp) + maxLogit
+            var entropy: Float = 0
+            for i in 0..<Int(nVocab) {
+                let p = exp(logits[i] - logSumExp)
+                if p > 0 { entropy -= p * log2(p) }
+            }
+            entropyWindow.append(entropy)
+            if entropyWindow.count > entropyWindowSize {
+                entropyWindow.removeFirst()
+            }
+            currentEntropy = entropy
+            averageEntropy = entropyWindow.reduce(0, +) / Float(entropyWindow.count)
+        }
+
         new_token_id = llama_sampler_sample(sampling, context, batch.n_tokens - 1)
 
         if llama_vocab_is_eog(vocab, new_token_id) || n_cur == n_len {
-            print("\n")
             is_done = true
             let new_token_str = String(cString: temporary_invalid_cchars + [0])
             temporary_invalid_cchars.removeAll()
@@ -225,7 +354,6 @@ actor LlamaContext {
         } else {
             new_token_str = ""
         }
-        print(new_token_str)
         // tokens_list.append(new_token_id)
 
         llama_batch_clear(&batch)
@@ -357,6 +485,11 @@ actor LlamaContext {
             return apply_ministral_template(messages: messages)
         }
 
+        // Gemma models
+        if modelDesc.contains("gemma") {
+            return apply_gemma_template(messages: messages)
+        }
+
         // Default: use llama.cpp's built-in template matching
         var chat: [llama_chat_message] = []
         var cStrings: [(UnsafeMutablePointer<CChar>, UnsafeMutablePointer<CChar>)] = []
@@ -471,6 +604,18 @@ actor LlamaContext {
         return result
     }
 
+    private func apply_gemma_template(messages: [(role: String, content: String)]) -> String {
+        var result = ""
+
+        for msg in messages {
+            let role = msg.role == "assistant" ? "model" : msg.role
+            result += "<|turn>\(role)\n\(msg.content)<turn|>\n"
+        }
+
+        result += "<|turn>model\n"
+        return result
+    }
+
     private func apply_chatml_template(messages: [(role: String, content: String)], thinkingPrefix: Bool) -> String {
         var result = ""
         for msg in messages {
@@ -491,7 +636,16 @@ actor LlamaContext {
     func clear() {
         tokens_list.removeAll()
         temporary_invalid_cchars.removeAll()
+        previousTokens.removeAll()
+        entropyWindow.removeAll()
         llama_memory_clear(llama_get_memory(context), true)
+    }
+
+    func clearGenerationState() {
+        tokens_list.removeAll()
+        temporary_invalid_cchars.removeAll()
+        entropyWindow.removeAll()
+        // Keep KV cache and previousTokens for prefix reuse
     }
 
     private func tokenize(text: String, add_bos: Bool, parse_special: Bool = false) -> [llama_token] {

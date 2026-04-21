@@ -143,6 +143,7 @@ struct ContentView: View {
                                 }
                             }
                         }
+                        .scrollContentBackground(.hidden)
                         .onTapGesture {
                             isFocused = false
                         }
