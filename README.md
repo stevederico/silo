@@ -43,11 +43,10 @@ Build and run on an iPhone or simulator running iOS 18.2+.
 - **Works offline** — airplane mode, subway, off-grid
 
 ### 🧠 **Models**
-- **Gemma 4 E2B** from Google (Q4 and Q8)
-- **Phi-4 Mini** from Microsoft
-- **Mistral / Ministral 3B** Instruct and Reasoning
-- **LFM 2.5** from Liquid AI with thinking mode
-- **SmolLM3 3B** multilingual from HuggingFace
+- **Gemma 4 E2B** from Google (Q4 default, Q8 optional)
+- **Qwen3.5** 0.8B and 2B from Alibaba — fast, modern small models
+- **Gemma 3** 1B and 4B from Google — proven on-device sizes
+- **Qwen3-4B** and **Llama 3.2 3B** — strong balanced options
 - **Bring your own GGUF** from any Hugging Face URL
 
 ### 💬 **Chat**

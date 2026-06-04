@@ -539,30 +539,33 @@ class LlamaState: ObservableObject {
     private let downloadableModels: [Model] = [
         LlamaState.defaultModel,
 
-        Model(name: "SmolLM3-3B Q4 (1.8 GiB)",
-              url: "https://huggingface.co/unsloth/SmolLM3-3B-GGUF/resolve/main/SmolLM3-3B-Q4_K_M.gguf?download=true",
-              filename: "SmolLM3-3B-Q4_K_M.gguf", status: "download"),
+        // ~1–1.3 GiB — fast on 6GB+ phones
+        Model(name: "Qwen3.5-2B Q4 (1.2 GiB)",
+              url: "https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/main/Qwen3.5-2B-Q4_K_M.gguf?download=true",
+              filename: "Qwen3.5-2B-Q4_K_M.gguf", status: "download"),
 
-        Model(name: "Phi-4 Mini Instruct Q4 (2.3 GiB)",
-              url: "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf?download=true",
-              filename: "Phi-4-mini-instruct-Q4_K_M.gguf", status: "download"),
+        Model(name: "Qwen3.5-0.8B Q4 (0.5 GiB)",
+              url: "https://huggingface.co/lmstudio-community/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-Q4_K_M.gguf?download=true",
+              filename: "Qwen3.5-0.8B-Q4_K_M.gguf", status: "download"),
 
-        Model(name: "LFM2.5-1.2B Instruct Q8 (1.3 GiB)",
-              url: "https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF/resolve/main/LFM2.5-1.2B-Instruct-Q8_0.gguf?download=true",
-              filename: "LFM2.5-1.2B-Instruct-Q8_0.gguf", status: "download"),
+        Model(name: "Gemma 3 1B Q4 (0.8 GiB)",
+              url: "https://huggingface.co/unsloth/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf?download=true",
+              filename: "gemma-3-1b-it-Q4_K_M.gguf", status: "download"),
 
-        Model(name: "LFM2.5-1.2B Thinking Q8 (1.3 GiB)",
-              url: "https://huggingface.co/LiquidAI/LFM2.5-1.2B-Thinking-GGUF/resolve/main/LFM2.5-1.2B-Thinking-Q8_0.gguf?download=true",
-              filename: "LFM2.5-1.2B-Thinking-Q8_0.gguf", status: "download"),
+        // ~2–2.4 GiB — balanced on 8GB+ phones
+        Model(name: "Gemma 3 4B Q4 (2.3 GiB)",
+              url: "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf?download=true",
+              filename: "gemma-3-4b-it-Q4_K_M.gguf", status: "download"),
 
-        Model(name: "Ministral-3B Instruct Q4 (2.2 GiB)",
-              url: "https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF/resolve/main/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf?download=true",
-              filename: "Ministral-3-3B-Instruct-2512-Q4_K_M.gguf", status: "download"),
+        Model(name: "Qwen3-4B Q4 (2.3 GiB)",
+              url: "https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf?download=true",
+              filename: "Qwen3-4B-Q4_K_M.gguf", status: "download"),
 
-        Model(name: "Ministral-3B Reasoning Q4 (2.2 GiB)",
-              url: "https://huggingface.co/mistralai/Ministral-3-3B-Reasoning-2512-GGUF/resolve/main/Ministral-3-3B-Reasoning-2512-Q4_K_M.gguf?download=true",
-              filename: "Ministral-3-3B-Reasoning-2512-Q4_K_M.gguf", status: "download"),
+        Model(name: "Llama 3.2 3B Q4 (1.9 GiB)",
+              url: "https://huggingface.co/unsloth/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf?download=true",
+              filename: "Llama-3.2-3B-Instruct-Q4_K_M.gguf", status: "download"),
 
+        // ~3–5 GiB — best quality, 8GB+ recommended
         Model(name: "Gemma 4 E2B Instruct Q8 (4.6 GiB)",
               url: "https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q8_0.gguf?download=true",
               filename: "gemma-4-E2B-it-Q8_0.gguf", status: "download")
@@ -861,12 +864,12 @@ class LlamaState: ObservableObject {
     }
 
     let modelRequirements: [String: Double] = [
-        "LFM2.5-1.2B Instruct Q8 (1.3 GiB)": 1.3,
-        "LFM2.5-1.2B Thinking Q8 (1.3 GiB)": 1.3,
-        "SmolLM3-3B Q4 (1.8 GiB)": 1.9,
-        "Phi-4 Mini Instruct Q4 (2.3 GiB)": 2.5,
-        "Ministral-3B Instruct Q4 (2.2 GiB)": 2.2,
-        "Ministral-3B Reasoning Q4 (2.2 GiB)": 2.2,
+        "Qwen3.5-0.8B Q4 (0.5 GiB)": 1.0,
+        "Gemma 3 1B Q4 (0.8 GiB)": 1.2,
+        "Qwen3.5-2B Q4 (1.2 GiB)": 1.6,
+        "Llama 3.2 3B Q4 (1.9 GiB)": 2.2,
+        "Gemma 3 4B Q4 (2.3 GiB)": 2.6,
+        "Qwen3-4B Q4 (2.3 GiB)": 2.6,
         "Gemma 4 E2B Instruct Q4 (2.9 GiB)": 3.0,
         "Gemma 4 E2B Instruct Q8 (4.6 GiB)": 5.0
     ]
