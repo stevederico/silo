@@ -26,8 +26,19 @@ actor LlamaCppEngine: InferenceEngine {
 
         let finalPrompt = await context.apply_chat_template(messages: messages)
         // print("Formatted prompt:\n\(finalPrompt)")
-        await context.completion_init_with_cache(text: finalPrompt)
+        try await context.completion_init_with_cache(text: finalPrompt)
         isComplete = false
+    }
+
+    func encodePrompt(messages: [(role: String, content: String)]) async throws {
+        guard let context = llamaContext else {
+            throw NSError(domain: "LlamaCppEngine", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Engine not initialized"
+            ])
+        }
+        let finalPrompt = await context.apply_chat_template(messages: messages)
+        try await context.completion_init_with_cache(text: finalPrompt)
+        isComplete = true
     }
 
     func streamToken() async throws -> String? {
@@ -40,7 +51,7 @@ actor LlamaCppEngine: InferenceEngine {
             return nil
         }
 
-        let token = await context.completion_loop()
+        let token = try await context.completion_loop()
 
         if await context.is_done {
             isComplete = true

@@ -238,7 +238,7 @@ struct SettingsView: View {
 
                 // MARK: - Legal Section
                 Section {
-                    Link(destination: URL(string: "https://example.com/privacy")!) {
+                    Link(destination: URL(string: "https://github.com/stevederico/silo")!) {
                         HStack {
                             Label("Privacy Policy", systemImage: "hand.raised")
                                 .foregroundColor(.primary)
