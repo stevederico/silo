@@ -557,10 +557,6 @@ class LlamaState: ObservableObject {
               url: "https://huggingface.co/unsloth/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf?download=true",
               filename: "Llama-3.2-3B-Instruct-Q4_K_M.gguf", status: "download"),
 
-        Model(name: "Phi-4 Mini Instruct Q4 (2.3 GiB)",
-              url: "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf?download=true",
-              filename: "Phi-4-mini-instruct-Q4_K_M.gguf", status: "download"),
-
         Model(name: "Ministral-3B Instruct Q4 (2.0 GiB)",
               url: "https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF/resolve/main/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf?download=true",
               filename: "Ministral-3-3B-Instruct-2512-Q4_K_M.gguf", status: "download"),
@@ -868,7 +864,6 @@ class LlamaState: ObservableObject {
         "Gemma 3 1B Q4 (0.8 GiB)": 1.2,
         "Llama 3.2 3B Q4 (1.9 GiB)": 2.2,
         "Gemma 3 4B Q4 (2.3 GiB)": 2.6,
-        "Phi-4 Mini Instruct Q4 (2.3 GiB)": 2.5,
         "Ministral-3B Instruct Q4 (2.0 GiB)": 2.2,
         "Gemma 4 E2B Instruct Q4 (2.9 GiB)": 3.0,
         "Gemma 4 E2B Instruct Q8 (4.6 GiB)": 5.0
