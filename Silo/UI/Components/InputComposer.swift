@@ -29,11 +29,15 @@ struct InputComposer: View {
             }
             .disabled(isGenerating || inputsDisabled)
 
-            TextField(isListening ? "Listening…" : (inputsDisabled ? "Waiting for model…" : "Ask anything"), text: $text, axis: .vertical)
+            TextField(
+                inputsDisabled ? "Waiting for model…" : (isListening ? "Listening…" : "Ask anything"),
+                text: $text,
+                axis: .vertical
+            )
                 .lineLimit(1...6)
                 .frame(minHeight: 32)
                 .focused(focusState)
-                .disabled(isListening || inputsDisabled)
+                .disabled(inputsDisabled)
                 .submitLabel(.send)
                 .onSubmit {
                     if !text.isEmpty && !isGenerating {

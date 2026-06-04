@@ -179,14 +179,6 @@ struct ContentView: View {
                         onVoiceToggle: { Task { await handleVoiceToggle() } },
                         focusState: $isFocused
                     )
-                    if voiceSession.isListening, !voiceSession.partialTranscript.isEmpty {
-                        Text(voiceSession.partialTranscript)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .padding(.horizontal, 20)
-                            .padding(.bottom, 4)
-                    }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .offset(x: drawerOffset)
@@ -247,22 +239,41 @@ struct ContentView: View {
             jobManager.llamaState = llamaState
             isFocused = true
         }
+        .onChange(of: voiceSession.partialTranscript) { _, newValue in
+            if voiceSession.isListening {
+                inputText = newValue
+            }
+        }
+        .onChange(of: voiceSession.isListening) { wasListening, isListening in
+            if isListening {
+                inputText = ""
+            } else if wasListening, !inputText.isEmpty {
+                // Text already synced from partial; send happens when user taps mic to stop.
+            }
+        }
     }
 
     private func sendMessage() {
-        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !llamaState.isGenerating else { return }
+        guard !llamaState.isGenerating else { return }
         guard !llamaState.modelSuspendedForSpeech else { return }
 
-        // Show manage models if no models installed
-        if llamaState.downloadedModels.isEmpty {
-            showManageModels = true
-            return
-        }
-
-        inputText = ""
-
         Task {
+            if voiceSession.isListening {
+                let spoken = await voiceSession.stopListening()
+                if !spoken.isEmpty {
+                    inputText = spoken
+                }
+            }
+
+            let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return }
+
+            if llamaState.downloadedModels.isEmpty {
+                showManageModels = true
+                return
+            }
+
+            inputText = ""
             await llamaState.complete(text: text)
         }
     }
@@ -281,14 +292,19 @@ struct ContentView: View {
         if llamaState.modelSuspendedForSpeech { return }
 
         if voiceSession.isListening {
-            let spoken = voiceSession.stopListening()
+            let spoken = await voiceSession.stopListening()
             guard !spoken.isEmpty else { return }
             inputText = spoken
             sendMessage()
             return
         }
         isFocused = false
-        await voiceSession.toggleListening()
+        inputText = ""
+        do {
+            try await voiceSession.startListening()
+        } catch {
+            voiceSession.errorMessage = error.localizedDescription
+        }
     }
 }
 

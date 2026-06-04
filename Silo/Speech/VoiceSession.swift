@@ -12,23 +12,12 @@ final class VoiceSession: ObservableObject {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var recognizer: SFSpeechRecognizer?
-
-    func toggleListening() async -> String? {
-        if isListening {
-            return stopListening()
-        }
-        do {
-            try await startListening()
-            return nil
-        } catch {
-            errorMessage = error.localizedDescription
-            return nil
-        }
-    }
+    private var finalizedTranscript = ""
 
     func startListening() async throws {
         errorMessage = nil
         partialTranscript = ""
+        finalizedTranscript = ""
 
         recognizer = try await LocalSpeechGuard.ensureReady()
 
@@ -52,12 +41,17 @@ final class VoiceSession: ObservableObject {
 
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
             Task { @MainActor in
+                guard let self else { return }
                 if let result {
-                    self?.partialTranscript = result.bestTranscription.formattedString
+                    let text = result.bestTranscription.formattedString
+                    self.partialTranscript = text
+                    if result.isFinal {
+                        self.finalizedTranscript = text
+                    }
                 }
                 if let error {
-                    self?.errorMessage = error.localizedDescription
-                    self?.stopListening()
+                    self.errorMessage = error.localizedDescription
+                    Task { _ = await self.stopListening() }
                 }
             }
         }
@@ -67,19 +61,27 @@ final class VoiceSession: ObservableObject {
         isListening = true
     }
 
-    func stopListening() -> String {
+    func stopListening() async -> String {
+        guard isListening else { return "" }
+
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
         recognitionTask?.finish()
+
+        // Final result often arrives shortly after finish().
+        try? await Task.sleep(for: .milliseconds(400))
+
         recognitionRequest = nil
         recognitionTask = nil
         isListening = false
 
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
 
-        let final = partialTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidate = finalizedTranscript.isEmpty ? partialTranscript : finalizedTranscript
+        let final = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
         partialTranscript = ""
+        finalizedTranscript = ""
         return final
     }
 }
