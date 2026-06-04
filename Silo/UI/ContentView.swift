@@ -7,6 +7,9 @@ struct ContentView: View {
     @State private var drawerOffset: CGFloat = 0
     @State private var showSettings = false
     @State private var showManageModels = false
+    @State private var showVideoImport = false
+    @StateObject private var transcriptionService = VideoTranscriptionService()
+    @StateObject private var voiceSession = VoiceSession()
     @FocusState private var isFocused: Bool
 
     private let drawerWidth: CGFloat = 300
@@ -153,10 +156,21 @@ struct ContentView: View {
                     InputComposer(
                         text: $inputText,
                         isGenerating: llamaState.isGenerating,
+                        isListening: voiceSession.isListening,
                         onSend: sendMessage,
                         onStop: stopGeneration,
+                        onVideoImport: { showVideoImport = true },
+                        onVoiceToggle: { Task { await handleVoiceToggle() } },
                         focusState: $isFocused
                     )
+                    if voiceSession.isListening, !voiceSession.partialTranscript.isEmpty {
+                        Text(voiceSession.partialTranscript)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 4)
+                    }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .offset(x: drawerOffset)
@@ -202,6 +216,13 @@ struct ContentView: View {
             .sheet(isPresented: $showManageModels) {
                 ManageModelsView(llamaState: llamaState)
             }
+            .sheet(isPresented: $showVideoImport) {
+                VideoImportView(transcriptionService: transcriptionService) { transcript in
+                    Task {
+                        await llamaState.attachVideoTranscript(transcript)
+                    }
+                }
+            }
         }
         .background(Color(.systemBackground))
         .onAppear {
@@ -231,6 +252,18 @@ struct ContentView: View {
         Task {
             await llamaState.stop()
         }
+    }
+
+    private func handleVoiceToggle() async {
+        if voiceSession.isListening {
+            let spoken = voiceSession.stopListening()
+            guard !spoken.isEmpty else { return }
+            inputText = spoken
+            sendMessage()
+            return
+        }
+        isFocused = false
+        await voiceSession.toggleListening()
     }
 }
 

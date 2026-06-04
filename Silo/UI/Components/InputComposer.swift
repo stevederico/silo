@@ -3,16 +3,36 @@ import SwiftUI
 struct InputComposer: View {
     @Binding var text: String
     let isGenerating: Bool
+    let isListening: Bool
     let onSend: () -> Void
     let onStop: () -> Void
+    let onVideoImport: () -> Void
+    let onVoiceToggle: () -> Void
     var focusState: FocusState<Bool>.Binding
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            TextField("Ask anything", text: $text, axis: .vertical)
+            Button(action: onVideoImport) {
+                Image(systemName: "film")
+                    .font(.system(size: 18))
+                    .foregroundStyle(.primary)
+                    .frame(width: 32, height: 32)
+            }
+            .disabled(isGenerating || isListening)
+
+            Button(action: onVoiceToggle) {
+                Image(systemName: isListening ? "mic.fill" : "mic")
+                    .font(.system(size: 18))
+                    .foregroundStyle(isListening ? .red : .primary)
+                    .frame(width: 32, height: 32)
+            }
+            .disabled(isGenerating)
+
+            TextField(isListening ? "Listening…" : "Ask anything", text: $text, axis: .vertical)
                 .lineLimit(1...6)
                 .frame(minHeight: 32)
                 .focused(focusState)
+                .disabled(isListening)
                 .submitLabel(.send)
                 .onSubmit {
                     if !text.isEmpty && !isGenerating {

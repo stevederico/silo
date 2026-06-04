@@ -220,13 +220,22 @@ struct Conversation: Identifiable, Codable {
     let id: UUID
     var title: String
     var messages: [ChatMessage]
+    var transcript: String?
     let createdAt: Date
     var updatedAt: Date
 
-    init(id: UUID = UUID(), title: String = "New Chat", messages: [ChatMessage] = [], createdAt: Date = Date(), updatedAt: Date = Date()) {
+    init(
+        id: UUID = UUID(),
+        title: String = "New Chat",
+        messages: [ChatMessage] = [],
+        transcript: String? = nil,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
         self.id = id
         self.title = title
         self.messages = messages
+        self.transcript = transcript
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -277,6 +286,7 @@ class LlamaState: ObservableObject {
     @Published var downloadedModels: [Model] = []
     @Published var undownloadedModels: [Model] = []
     @Published var currentConversation: Conversation?
+    @Published var conversationTranscript: String?
     @Published var modelLoadError: String?
 
     // Active download tracking — persists across modal dismiss/re-present
@@ -627,15 +637,48 @@ class LlamaState: ObservableObject {
         print("Loaded model")
     }
 
+    private static func transcriptSystemMessage(_ transcript: String) -> String {
+        let maxChars = 100_000
+        let body = transcript.count > maxChars ? String(transcript.prefix(maxChars)) + "\n…[truncated]" : transcript
+        return """
+        The user attached a video transcript. Answer only using information from this transcript. If the answer is not in the transcript, say so clearly.
+
+        Transcript:
+        \(body)
+        """
+    }
+
+    private func appendTranscriptContext(to chatMessages: inout [(role: String, content: String)]) {
+        let transcript = conversationTranscript ?? currentConversation?.transcript
+        guard let transcript, !transcript.isEmpty else { return }
+        chatMessages.append((role: "system", content: Self.transcriptSystemMessage(transcript)))
+    }
+
     private func chatMessagesForInference() -> [(role: String, content: String)] {
         var chatMessages: [(role: String, content: String)] = []
         if !systemPrompt.isEmpty {
             chatMessages.append((role: "system", content: systemPrompt))
         }
+        appendTranscriptContext(to: &chatMessages)
         for msg in messages {
             chatMessages.append((role: msg.isUser ? "user" : "assistant", content: msg.content))
         }
         return chatMessages
+    }
+
+    /// Starts a new chat with an on-device video transcript as grounding context.
+    func attachVideoTranscript(_ transcript: String) async {
+        await clear()
+        conversationTranscript = transcript
+        var conversation = conversationManager?.createNew() ?? Conversation()
+        conversation.transcript = transcript
+        conversation.title = "Video chat"
+        currentConversation = conversation
+
+        let preview = "Interview transcript attached (\(transcript.count) characters). Ask questions about the video."
+        messages = [ChatMessage(content: preview, isUser: true, timestamp: Date())]
+        conversation.messages = messages
+        conversationManager?.save(conversation)
     }
 
     func restoreToUndownloaded(filename: String) {
@@ -680,6 +723,7 @@ class LlamaState: ObservableObject {
             if !systemPrompt.isEmpty {
                 chatMessages.append((role: "system", content: systemPrompt))
             }
+            appendTranscriptContext(to: &chatMessages)
             for msg in messages {
                 chatMessages.append((role: msg.isUser ? "user" : "assistant", content: msg.content))
             }
@@ -833,6 +877,7 @@ class LlamaState: ObservableObject {
         await inferenceEngine.clear()
         messages = []
         currentResponse = ""
+        conversationTranscript = nil
         currentConversation = conversationManager?.createNew()
     }
 
@@ -978,6 +1023,7 @@ class LlamaState: ObservableObject {
 
         if var conversation = currentConversation {
             conversation.messages = messages
+            conversation.transcript = conversationTranscript ?? conversation.transcript
             conversation.updatedAt = Date()
             conversationManager?.save(conversation)
             currentConversation = conversation
@@ -994,6 +1040,7 @@ class LlamaState: ObservableObject {
         saveCurrentConversation()
         guard let conversation = conversationManager?.loadFullConversation(id: id) else { return }
         messages = conversation.messages
+        conversationTranscript = conversation.transcript
         currentConversation = conversation
         conversationManager?.currentConversationId = conversation.id
     }
