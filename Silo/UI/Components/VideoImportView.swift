@@ -3,10 +3,9 @@ import UniformTypeIdentifiers
 import PhotosUI
 
 struct VideoImportView: View {
-    @ObservedObject var transcriptionService: VideoTranscriptionService
+    @ObservedObject var jobManager: TranscriptionJobManager
+    @ObservedObject var llamaState: LlamaState
     @Environment(\.dismiss) private var dismiss
-
-    let onTranscriptReady: (String) -> Void
 
     @State private var pickerItem: PhotosPickerItem?
     @State private var showFileImporter = false
@@ -15,20 +14,20 @@ struct VideoImportView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 20) {
-                Text("Import an interview video. Transcription runs on your device only — nothing is uploaded.")
+                Text("Import an interview video. Transcription runs on your device only — nothing is uploaded. You can leave this screen while it works.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal)
 
-                if transcriptionService.isTranscribing {
-                    ProgressView(value: transcriptionService.progress)
+                if jobManager.isRunning {
+                    ProgressView(value: jobManager.progress)
                         .padding(.horizontal)
-                    Text(transcriptionService.statusMessage)
+                    Text(jobManager.statusMessage)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Button("Cancel", role: .cancel) {
-                        transcriptionService.cancel()
+                        jobManager.cancel()
                     }
                 } else {
                     PhotosPicker(selection: $pickerItem, matching: .videos) {
@@ -67,7 +66,7 @@ struct VideoImportView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
-                        .disabled(transcriptionService.isTranscribing)
+                        .disabled(jobManager.isRunning)
                 }
             }
             .fileImporter(
@@ -78,7 +77,7 @@ struct VideoImportView: View {
                 switch result {
                 case .success(let urls):
                     guard let url = urls.first else { return }
-                    Task { await transcribe(url: url) }
+                    Task { await startTranscription(url: url) }
                 case .failure(let error):
                     errorMessage = error.localizedDescription
                 }
@@ -97,21 +96,16 @@ struct VideoImportView: View {
                 errorMessage = "Could not load video from Photos."
                 return
             }
-            await transcribe(url: movie.url)
+            await startTranscription(url: movie.url)
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    private func transcribe(url: URL) async {
+    private func startTranscription(url: URL) async {
         errorMessage = nil
         do {
-            let transcript = try await transcriptionService.transcribe(mediaURL: url)
-            guard !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                errorMessage = "No speech detected in this file."
-                return
-            }
-            onTranscriptReady(transcript)
+            _ = try await jobManager.startJob(mediaURL: url, llamaState: llamaState)
             dismiss()
         } catch {
             errorMessage = error.localizedDescription

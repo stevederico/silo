@@ -8,7 +8,8 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var showManageModels = false
     @State private var showVideoImport = false
-    @StateObject private var transcriptionService = VideoTranscriptionService()
+    @State private var showTranscript = false
+    @StateObject private var jobManager = TranscriptionJobManager()
     @StateObject private var voiceSession = VoiceSession()
     @FocusState private var isFocused: Bool
 
@@ -86,6 +87,20 @@ struct ContentView: View {
                         }
                     )
 
+                    if jobManager.isRunning {
+                        TranscriptionProgressBanner(
+                            progress: jobManager.progress,
+                            message: jobManager.statusMessage,
+                            modelSuspended: llamaState.modelSuspendedForSpeech,
+                            onCancel: { jobManager.cancel() }
+                        )
+                    } else if llamaState.transcriptCharacterCount > 0 {
+                        TranscriptAttachmentBanner(
+                            characterCount: llamaState.transcriptCharacterCount,
+                            onViewTranscript: { showTranscript = true }
+                        )
+                    }
+
                     // Chat area
                     if llamaState.messages.isEmpty && !llamaState.isGenerating {
                         Spacer()
@@ -157,6 +172,7 @@ struct ContentView: View {
                         text: $inputText,
                         isGenerating: llamaState.isGenerating,
                         isListening: voiceSession.isListening,
+                        inputsDisabled: llamaState.modelSuspendedForSpeech || llamaState.speechSynthesizer.isSpeaking,
                         onSend: sendMessage,
                         onStop: stopGeneration,
                         onVideoImport: { showVideoImport = true },
@@ -217,16 +233,18 @@ struct ContentView: View {
                 ManageModelsView(llamaState: llamaState)
             }
             .sheet(isPresented: $showVideoImport) {
-                VideoImportView(transcriptionService: transcriptionService) { transcript in
-                    Task {
-                        await llamaState.attachVideoTranscript(transcript)
-                    }
+                VideoImportView(jobManager: jobManager, llamaState: llamaState)
+            }
+            .sheet(isPresented: $showTranscript) {
+                if let text = llamaState.resolvedTranscriptText() {
+                    TranscriptView(transcript: text, title: "Transcript")
                 }
             }
         }
         .background(Color(.systemBackground))
         .onAppear {
             llamaState.conversationManager = conversationManager
+            jobManager.llamaState = llamaState
             isFocused = true
         }
     }
@@ -234,6 +252,7 @@ struct ContentView: View {
     private func sendMessage() {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !llamaState.isGenerating else { return }
+        guard !llamaState.modelSuspendedForSpeech else { return }
 
         // Show manage models if no models installed
         if llamaState.downloadedModels.isEmpty {
@@ -255,6 +274,12 @@ struct ContentView: View {
     }
 
     private func handleVoiceToggle() async {
+        if llamaState.speechSynthesizer.isSpeaking {
+            llamaState.speechSynthesizer.stop()
+            return
+        }
+        if llamaState.modelSuspendedForSpeech { return }
+
         if voiceSession.isListening {
             let spoken = voiceSession.stopListening()
             guard !spoken.isEmpty else { return }

@@ -4,6 +4,7 @@ struct InputComposer: View {
     @Binding var text: String
     let isGenerating: Bool
     let isListening: Bool
+    var inputsDisabled: Bool = false
     let onSend: () -> Void
     let onStop: () -> Void
     let onVideoImport: () -> Void
@@ -18,7 +19,7 @@ struct InputComposer: View {
                     .foregroundStyle(.primary)
                     .frame(width: 32, height: 32)
             }
-            .disabled(isGenerating || isListening)
+            .disabled(isGenerating || isListening || inputsDisabled)
 
             Button(action: onVoiceToggle) {
                 Image(systemName: isListening ? "mic.fill" : "mic")
@@ -26,13 +27,13 @@ struct InputComposer: View {
                     .foregroundStyle(isListening ? .red : .primary)
                     .frame(width: 32, height: 32)
             }
-            .disabled(isGenerating)
+            .disabled(isGenerating || inputsDisabled)
 
-            TextField(isListening ? "Listening…" : "Ask anything", text: $text, axis: .vertical)
+            TextField(isListening ? "Listening…" : (inputsDisabled ? "Waiting for model…" : "Ask anything"), text: $text, axis: .vertical)
                 .lineLimit(1...6)
                 .frame(minHeight: 32)
                 .focused(focusState)
-                .disabled(isListening)
+                .disabled(isListening || inputsDisabled)
                 .submitLabel(.send)
                 .onSubmit {
                     if !text.isEmpty && !isGenerating {

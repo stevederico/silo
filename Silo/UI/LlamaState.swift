@@ -221,6 +221,8 @@ struct Conversation: Identifiable, Codable {
     var title: String
     var messages: [ChatMessage]
     var transcript: String?
+    /// Relative path under Documents (e.g. `transcripts/<id>.txt`) for long transcripts.
+    var transcriptFilename: String?
     let createdAt: Date
     var updatedAt: Date
 
@@ -229,6 +231,7 @@ struct Conversation: Identifiable, Codable {
         title: String = "New Chat",
         messages: [ChatMessage] = [],
         transcript: String? = nil,
+        transcriptFilename: String? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -236,6 +239,7 @@ struct Conversation: Identifiable, Codable {
         self.title = title
         self.messages = messages
         self.transcript = transcript
+        self.transcriptFilename = transcriptFilename
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -287,7 +291,14 @@ class LlamaState: ObservableObject {
     @Published var undownloadedModels: [Model] = []
     @Published var currentConversation: Conversation?
     @Published var conversationTranscript: String?
+    @Published var modelSuspendedForSpeech = false
     @Published var modelLoadError: String?
+    @Published var speakRepliesEnabled: Bool {
+        didSet { UserDefaults.standard.set(speakRepliesEnabled, forKey: "speakRepliesEnabled") }
+    }
+
+    let speechSynthesizer = SpeechSynthesizerService()
+    private var suspendedModelURL: URL?
 
     // Active download tracking — persists across modal dismiss/re-present
     @Published var activeDownloads: [String: Double] = [:]  // filename -> progress
@@ -402,6 +413,7 @@ class LlamaState: ObservableObject {
 
     init() {
         self.systemPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? ""
+        self.speakRepliesEnabled = UserDefaults.standard.bool(forKey: "speakRepliesEnabled")
         let saved = UserDefaults.standard.integer(forKey: "contextSize")
         self.contextSize = saved > 0 ? UInt32(saved) : 4096
         loadModelsFromDisk()
@@ -648,10 +660,83 @@ class LlamaState: ObservableObject {
         """
     }
 
+    func resolvedTranscriptText() -> String? {
+        if let conversationTranscript, !conversationTranscript.isEmpty {
+            return conversationTranscript
+        }
+        if let inline = currentConversation?.transcript, !inline.isEmpty {
+            return inline
+        }
+        if let filename = currentConversation?.transcriptFilename {
+            let url = getDocumentsDirectory().appendingPathComponent(filename)
+            return try? String(contentsOf: url, encoding: .utf8)
+        }
+        return nil
+    }
+
+    var transcriptCharacterCount: Int {
+        resolvedTranscriptText()?.count ?? 0
+    }
+
     private func appendTranscriptContext(to chatMessages: inout [(role: String, content: String)]) {
-        let transcript = conversationTranscript ?? currentConversation?.transcript
-        guard let transcript, !transcript.isEmpty else { return }
+        guard let transcript = resolvedTranscriptText(), !transcript.isEmpty else { return }
         chatMessages.append((role: "system", content: Self.transcriptSystemMessage(transcript)))
+    }
+
+    private func saveTranscriptToDisk(conversationId: UUID, transcript: String) throws -> String {
+        let dir = getDocumentsDirectory().appendingPathComponent("transcripts", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let relative = "transcripts/\(conversationId.uuidString).txt"
+        let url = getDocumentsDirectory().appendingPathComponent(relative)
+        try transcript.write(to: url, atomically: true, encoding: .utf8)
+        return relative
+    }
+
+    func suspendModelForSpeech() async {
+        guard inferenceEngine != nil else { return }
+        if isGenerating { await stop() }
+
+        if !currentModelName.isEmpty {
+            let documents = getDocumentsDirectory()
+            let files = (try? FileManager.default.contentsOfDirectory(at: documents, includingPropertiesForKeys: nil)) ?? []
+            suspendedModelURL = files.first {
+                $0.pathExtension.lowercased() == "gguf"
+                    && $0.deletingPathExtension().lastPathComponent == currentModelName
+            }
+        }
+
+        await inferenceEngine?.deinitialize()
+        inferenceEngine = nil
+        modelSuspendedForSpeech = true
+    }
+
+    func resumeModelAfterSpeech() async {
+        guard modelSuspendedForSpeech else { return }
+        defer {
+            modelSuspendedForSpeech = false
+            suspendedModelURL = nil
+        }
+        guard let modelURL = suspendedModelURL else { return }
+
+        isLoadingModel = true
+        modelLoadProgress = 0
+        modelLoadError = nil
+
+        let engine = LlamaCppEngine()
+        inferenceEngine = engine
+        do {
+            try await engine.initialize(modelPath: modelURL.path(), contextSize: contextSize) { [weak self] progress in
+                Task { @MainActor in
+                    self?.modelLoadProgress = Double(progress)
+                }
+            }
+        } catch {
+            isLoadingModel = false
+            modelLoadError = error.localizedDescription
+            inferenceEngine = nil
+            return
+        }
+        isLoadingModel = false
     }
 
     private func chatMessagesForInference() -> [(role: String, content: String)] {
@@ -667,18 +752,34 @@ class LlamaState: ObservableObject {
     }
 
     /// Starts a new chat with an on-device video transcript as grounding context.
-    func attachVideoTranscript(_ transcript: String) async {
-        await clear()
+    func attachVideoTranscript(_ transcript: String, transcriptJobId: UUID? = nil) async {
+        saveCurrentConversation()
+        messages = []
         conversationTranscript = transcript
+
         var conversation = conversationManager?.createNew() ?? Conversation()
-        conversation.transcript = transcript
         conversation.title = "Video chat"
+
+        if let jobId = transcriptJobId,
+           let jobTranscript = TranscriptionCheckpointStore.readTranscript(jobId: jobId),
+           !jobTranscript.isEmpty {
+            conversationTranscript = jobTranscript
+        }
+
+        let text = conversationTranscript ?? transcript
+        if let relative = try? saveTranscriptToDisk(conversationId: conversation.id, transcript: text) {
+            conversation.transcriptFilename = relative
+            conversation.transcript = nil
+        } else {
+            conversation.transcript = text
+        }
         currentConversation = conversation
 
-        let preview = "Interview transcript attached (\(transcript.count) characters). Ask questions about the video."
+        let preview = "Interview transcript attached (\(text.count) characters). Ask questions about the video."
         messages = [ChatMessage(content: preview, isUser: true, timestamp: Date())]
         conversation.messages = messages
         conversationManager?.save(conversation)
+        conversationManager?.currentConversationId = conversation.id
     }
 
     func restoreToUndownloaded(filename: String) {
@@ -696,10 +797,21 @@ class LlamaState: ObservableObject {
 
     func complete(text: String) async {
         guard !isGenerating else { return }
+        if modelSuspendedForSpeech {
+            let notice = ChatMessage(
+                content: "The language model is reloading after transcription. Please wait a moment and try again.",
+                isUser: false,
+                timestamp: Date()
+            )
+            messages.append(notice)
+            saveCurrentConversation()
+            return
+        }
         guard let inferenceEngine else {
             return
         }
 
+        speechSynthesizer.stop()
         isGenerating = true
         isStopped = false
         rawResponse = ""
@@ -809,6 +921,10 @@ class LlamaState: ObservableObject {
                                     }
                                     self.currentResponse = snapshot
                                     self.modelConfidence = confidence
+                                    self.speechSynthesizer.feed(
+                                        displayText: snapshot,
+                                        enabled: self.speakRepliesEnabled
+                                    )
                                 }
                             }
                         }
@@ -840,6 +956,7 @@ class LlamaState: ObservableObject {
                 let aiMessage = ChatMessage(content: savedRaw, isUser: false, timestamp: Date())
                 self.messages.append(aiMessage)
                 self.currentResponse = ""
+                self.speechSynthesizer.finish(enabled: self.speakRepliesEnabled)
                 self.saveCurrentConversation()
             }
 
@@ -869,12 +986,11 @@ class LlamaState: ObservableObject {
     }
 
     func clear() async {
-        guard let inferenceEngine else {
-            return
-        }
-
         saveCurrentConversation()
-        await inferenceEngine.clear()
+        speechSynthesizer.stop()
+        if let inferenceEngine {
+            await inferenceEngine.clear()
+        }
         messages = []
         currentResponse = ""
         conversationTranscript = nil
@@ -887,6 +1003,7 @@ class LlamaState: ObservableObject {
         }
 
         isStopped = true
+        speechSynthesizer.stop()
         await inferenceEngine.stop()
 
         // Flush filter/stripper buffers before saving
@@ -1023,7 +1140,14 @@ class LlamaState: ObservableObject {
 
         if var conversation = currentConversation {
             conversation.messages = messages
-            conversation.transcript = conversationTranscript ?? conversation.transcript
+            if let conversationTranscript {
+                if let relative = try? saveTranscriptToDisk(conversationId: conversation.id, transcript: conversationTranscript) {
+                    conversation.transcriptFilename = relative
+                    conversation.transcript = nil
+                } else {
+                    conversation.transcript = conversationTranscript
+                }
+            }
             conversation.updatedAt = Date()
             conversationManager?.save(conversation)
             currentConversation = conversation
@@ -1040,7 +1164,12 @@ class LlamaState: ObservableObject {
         saveCurrentConversation()
         guard let conversation = conversationManager?.loadFullConversation(id: id) else { return }
         messages = conversation.messages
-        conversationTranscript = conversation.transcript
+        if let filename = conversation.transcriptFilename {
+            let url = getDocumentsDirectory().appendingPathComponent(filename)
+            conversationTranscript = try? String(contentsOf: url, encoding: .utf8)
+        } else {
+            conversationTranscript = conversation.transcript
+        }
         currentConversation = conversation
         conversationManager?.currentConversationId = conversation.id
     }
