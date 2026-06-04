@@ -266,10 +266,6 @@ struct SettingsView: View {
                             url: "https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct/blob/main/LICENSE.txt"
                         )
                         AcknowledgementLink(
-                            title: "Phi-4 Mini (MIT License)",
-                            url: "https://huggingface.co/microsoft/Phi-4-mini-instruct/blob/main/LICENSE"
-                        )
-                        AcknowledgementLink(
                             title: "Ministral (Mistral Community License)",
                             url: "https://mistral.ai/licenses/MCL-0.1.md"
                         )
