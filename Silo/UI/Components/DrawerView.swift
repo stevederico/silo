@@ -258,20 +258,16 @@ struct SettingsView: View {
                             url: "https://github.com/ggerganov/llama.cpp/blob/master/LICENSE"
                         )
                         AcknowledgementLink(
-                            title: "SmolLM3 (Apache 2.0 License)",
-                            url: "https://huggingface.co/HuggingFaceTB/SmolLM3-3B/blob/main/LICENSE"
-                        )
-                        AcknowledgementLink(
-                            title: "Gemma 4 (Gemma License)",
+                            title: "Gemma 3 & 4 (Gemma License)",
                             url: "https://ai.google.dev/gemma/terms"
                         )
                         AcknowledgementLink(
-                            title: "Ministral (Mistral Community License)",
-                            url: "https://mistral.ai/licenses/MCL-0.1.md"
+                            title: "Qwen3 & Qwen3.5 (Apache 2.0 License)",
+                            url: "https://huggingface.co/Qwen/Qwen3.5-2B/blob/main/LICENSE"
                         )
                         AcknowledgementLink(
-                            title: "LFM2.5 (Liquid AI License)",
-                            url: "https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF/blob/main/LICENSE"
+                            title: "Llama 3.2 (Llama License)",
+                            url: "https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct/blob/main/LICENSE.txt"
                         )
                     } label: {
                         Label("Open Source Licenses", systemImage: "doc.text")
