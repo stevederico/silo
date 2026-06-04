@@ -71,7 +71,7 @@ struct ContentView: View {
                         },
                         onModelSelect: { model in
                             let fileURL = llamaState.getDocumentsDirectory().appendingPathComponent(model.filename)
-                            try? llamaState.loadModel(modelUrl: fileURL)
+                            Task { try? await llamaState.loadModel(modelUrl: fileURL) }
                         },
                         onNewChat: {
                             Task {

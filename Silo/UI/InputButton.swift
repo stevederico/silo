@@ -108,10 +108,12 @@ struct InputButton: View {
                             download()
                             return
                         }
-                        do {
-                            try llamaState.loadModel(modelUrl: fileURL)
-                        } catch let err {
-                            print("Error: \(err.localizedDescription)")
+                        Task {
+                            do {
+                                try await llamaState.loadModel(modelUrl: fileURL)
+                            } catch let err {
+                                print("Error: \(err.localizedDescription)")
+                            }
                         }
                     } else {
                         download()
