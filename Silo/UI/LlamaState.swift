@@ -539,24 +539,12 @@ class LlamaState: ObservableObject {
     private let downloadableModels: [Model] = [
         LlamaState.defaultModel,
 
-        // ~1–1.3 GiB — fast on 6GB+ phones
+        // ~1.2 GiB — fast on 6GB+ phones
         Model(name: "LFM2.5-1.2B Instruct Q8 (1.2 GiB)",
               url: "https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF/resolve/main/LFM2.5-1.2B-Instruct-Q8_0.gguf?download=true",
               filename: "LFM2.5-1.2B-Instruct-Q8_0.gguf", status: "download"),
 
-        Model(name: "Gemma 3 1B Q4 (0.8 GiB)",
-              url: "https://huggingface.co/unsloth/gemma-3-1b-it-GGUF/resolve/main/gemma-3-1b-it-Q4_K_M.gguf?download=true",
-              filename: "gemma-3-1b-it-Q4_K_M.gguf", status: "download"),
-
-        // ~2–2.4 GiB — balanced on 8GB+ phones
-        Model(name: "Gemma 3 4B Q4 (2.3 GiB)",
-              url: "https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf?download=true",
-              filename: "gemma-3-4b-it-Q4_K_M.gguf", status: "download"),
-
-        Model(name: "Llama 3.2 3B Q4 (1.9 GiB)",
-              url: "https://huggingface.co/unsloth/Llama-3.2-3B-Instruct-GGUF/resolve/main/Llama-3.2-3B-Instruct-Q4_K_M.gguf?download=true",
-              filename: "Llama-3.2-3B-Instruct-Q4_K_M.gguf", status: "download"),
-
+        // ~2 GiB — balanced on 8GB+ phones
         Model(name: "Ministral-3B Instruct Q4 (2.0 GiB)",
               url: "https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF/resolve/main/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf?download=true",
               filename: "Ministral-3-3B-Instruct-2512-Q4_K_M.gguf", status: "download"),
@@ -861,9 +849,6 @@ class LlamaState: ObservableObject {
 
     let modelRequirements: [String: Double] = [
         "LFM2.5-1.2B Instruct Q8 (1.2 GiB)": 1.3,
-        "Gemma 3 1B Q4 (0.8 GiB)": 1.2,
-        "Llama 3.2 3B Q4 (1.9 GiB)": 2.2,
-        "Gemma 3 4B Q4 (2.3 GiB)": 2.6,
         "Ministral-3B Instruct Q4 (2.0 GiB)": 2.2,
         "Gemma 4 E2B Instruct Q4 (2.9 GiB)": 3.0,
         "Gemma 4 E2B Instruct Q8 (4.6 GiB)": 5.0

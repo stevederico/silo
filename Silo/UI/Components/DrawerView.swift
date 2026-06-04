@@ -258,12 +258,8 @@ struct SettingsView: View {
                             url: "https://github.com/ggerganov/llama.cpp/blob/master/LICENSE"
                         )
                         AcknowledgementLink(
-                            title: "Gemma 3 & 4 (Gemma License)",
+                            title: "Gemma 4 (Gemma License)",
                             url: "https://ai.google.dev/gemma/terms"
-                        )
-                        AcknowledgementLink(
-                            title: "Llama 3.2 (Llama License)",
-                            url: "https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct/blob/main/LICENSE.txt"
                         )
                         AcknowledgementLink(
                             title: "Ministral (Mistral Community License)",

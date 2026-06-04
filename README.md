@@ -44,8 +44,7 @@ Build and run on an iPhone or simulator running iOS 18.2+.
 
 ### 🧠 **Models**
 - **Gemma 4 E2B** from Google (Q4 default, Q8 optional)
-- **Gemma 3** 1B and 4B from Google — light and balanced on-device sizes
-- **Llama 3.2 3B** from Meta, **Ministral 3B** from Mistral
+- **Ministral 3B** from Mistral — balanced instruct model
 - **LFM 2.5** from Liquid AI — fast 1.2B instruct model
 - **Bring your own GGUF** from any Hugging Face URL
 
