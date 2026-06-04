@@ -7,6 +7,8 @@ struct Model: Identifiable {
     var filename: String
     var status: String?
     var rec: Bool?
+    /// Official model release date — catalog entries must be within 12 months.
+    var released: Date = .distantPast
 }
 
 struct ChatMessage: Identifiable, Codable {
@@ -531,29 +533,52 @@ class LlamaState: ObservableObject {
         return paths[0]
     }
 
+    private static let catalogMaxAgeMonths = 12
+
+    private static func catalogDate(_ year: Int, _ month: Int, _ day: Int) -> Date {
+        Calendar.current.date(from: DateComponents(year: year, month: month, day: day)) ?? .distantPast
+    }
+
+    private static var catalogAgeCutoff: Date {
+        Calendar.current.date(byAdding: .month, value: -catalogMaxAgeMonths, to: Date()) ?? .distantPast
+    }
+
+    private static func catalogEligible(_ models: [Model]) -> [Model] {
+        models.filter { $0.released >= catalogAgeCutoff }
+    }
+
     static let defaultModel = Model(
         name: "Gemma 4 E2B Instruct Q4 (2.9 GiB)",
         url: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf?download=true",
-        filename: "gemma-4-E2B-it-Q4_K_M.gguf", status: "download")
+        filename: "gemma-4-E2B-it-Q4_K_M.gguf",
+        status: "download",
+        released: catalogDate(2026, 4, 2))
 
-    private let downloadableModels: [Model] = [
+    private static let allDownloadableModels: [Model] = [
         LlamaState.defaultModel,
 
-        // ~1.2 GiB — fast on 6GB+ phones
         Model(name: "LFM2.5-1.2B Instruct Q8 (1.2 GiB)",
               url: "https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF/resolve/main/LFM2.5-1.2B-Instruct-Q8_0.gguf?download=true",
-              filename: "LFM2.5-1.2B-Instruct-Q8_0.gguf", status: "download"),
+              filename: "LFM2.5-1.2B-Instruct-Q8_0.gguf",
+              status: "download",
+              released: catalogDate(2026, 1, 5)),
 
-        // ~2 GiB — balanced on 8GB+ phones
         Model(name: "Ministral-3B Instruct Q4 (2.0 GiB)",
               url: "https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512-GGUF/resolve/main/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf?download=true",
-              filename: "Ministral-3-3B-Instruct-2512-Q4_K_M.gguf", status: "download"),
+              filename: "Ministral-3-3B-Instruct-2512-Q4_K_M.gguf",
+              status: "download",
+              released: catalogDate(2025, 12, 2)),
 
-        // ~3–5 GiB — best quality, 8GB+ recommended
         Model(name: "Gemma 4 E2B Instruct Q8 (4.6 GiB)",
               url: "https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q8_0.gguf?download=true",
-              filename: "gemma-4-E2B-it-Q8_0.gguf", status: "download")
+              filename: "gemma-4-E2B-it-Q8_0.gguf",
+              status: "download",
+              released: catalogDate(2026, 4, 2))
     ]
+
+    private var downloadableModels: [Model] {
+        Self.catalogEligible(Self.allDownloadableModels)
+    }
 
     private func reloadCurrentModel() {
         guard !currentModelName.isEmpty else { return }
