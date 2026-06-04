@@ -3,6 +3,7 @@ import llama
 
 enum LlamaError: Error {
     case couldNotInitializeContext
+    case decodeFailed
 }
 
 private class ProgressCallbackContext {
@@ -238,7 +239,7 @@ actor LlamaContext {
         return true
     }
 
-    func completion_init_with_cache(text: String) {
+    func completion_init_with_cache(text: String) throws {
         is_done = false
         let newTokens = tokenize(text: text, add_bos: false, parse_special: true)
         temporary_invalid_cchars = []
@@ -286,7 +287,8 @@ actor LlamaContext {
 
                 if llama_decode(context, batch) != 0 {
                     print("llama_decode() failed during cached init at position \(chunkStart)")
-                    return
+                    is_done = true
+                    throw LlamaError.decodeFailed
                 }
             }
         } else if !newTokens.isEmpty {
@@ -295,6 +297,8 @@ actor LlamaContext {
             llama_batch_add(&batch, newTokens[newTokens.count - 1], Int32(newTokens.count - 1), [0], true)
             if llama_decode(context, batch) != 0 {
                 print("llama_decode() failed during logit refresh")
+                is_done = true
+                throw LlamaError.decodeFailed
             }
         }
 
@@ -303,7 +307,7 @@ actor LlamaContext {
         n_cur = Int32(newTokens.count)
     }
 
-    func completion_loop() -> String {
+    func completion_loop() throws -> String {
         var new_token_id: llama_token = 0
 
         // Compute entropy from logits before sampling
@@ -364,6 +368,8 @@ actor LlamaContext {
 
         if llama_decode(context, batch) != 0 {
             print("failed to evaluate llama!")
+            is_done = true
+            throw LlamaError.decodeFailed
         }
 
         return new_token_str

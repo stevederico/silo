@@ -238,7 +238,7 @@ struct SettingsView: View {
 
                 // MARK: - Legal Section
                 Section {
-                    Link(destination: URL(string: "https://example.com/privacy")!) {
+                    Link(destination: URL(string: "https://github.com/stevederico/silo")!) {
                         HStack {
                             Label("Privacy Policy", systemImage: "hand.raised")
                                 .foregroundColor(.primary)
@@ -256,10 +256,6 @@ struct SettingsView: View {
                         AcknowledgementLink(
                             title: "Llama.cpp (MIT License)",
                             url: "https://github.com/ggerganov/llama.cpp/blob/master/LICENSE"
-                        )
-                        AcknowledgementLink(
-                            title: "SmolLM3 (Apache 2.0 License)",
-                            url: "https://huggingface.co/HuggingFaceTB/SmolLM3-3B/blob/main/LICENSE"
                         )
                         AcknowledgementLink(
                             title: "Gemma 4 (Gemma License)",
