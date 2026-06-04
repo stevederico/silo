@@ -262,12 +262,20 @@ struct SettingsView: View {
                             url: "https://ai.google.dev/gemma/terms"
                         )
                         AcknowledgementLink(
-                            title: "Qwen3 & Qwen3.5 (Apache 2.0 License)",
-                            url: "https://huggingface.co/Qwen/Qwen3.5-2B/blob/main/LICENSE"
-                        )
-                        AcknowledgementLink(
                             title: "Llama 3.2 (Llama License)",
                             url: "https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct/blob/main/LICENSE.txt"
+                        )
+                        AcknowledgementLink(
+                            title: "Phi-4 Mini (MIT License)",
+                            url: "https://huggingface.co/microsoft/Phi-4-mini-instruct/blob/main/LICENSE"
+                        )
+                        AcknowledgementLink(
+                            title: "Ministral (Mistral Community License)",
+                            url: "https://mistral.ai/licenses/MCL-0.1.md"
+                        )
+                        AcknowledgementLink(
+                            title: "LFM2.5 (Liquid AI License)",
+                            url: "https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF/blob/main/LICENSE"
                         )
                     } label: {
                         Label("Open Source Licenses", systemImage: "doc.text")
