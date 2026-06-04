@@ -275,6 +275,7 @@ class LlamaState: ObservableObject {
     @Published var downloadedModels: [Model] = []
     @Published var undownloadedModels: [Model] = []
     @Published var currentConversation: Conversation?
+    @Published var modelLoadError: String?
 
     // Active download tracking — persists across modal dismiss/re-present
     @Published var activeDownloads: [String: Double] = [:]  // filename -> progress
@@ -337,10 +338,10 @@ class LlamaState: ObservableObject {
                     print("Writing to \(filename) completed (\(size) bytes)")
 
                     Task { @MainActor [weak self] in
-                        self?.cleanupDownload(filename: filename)
-                        self?.cacheCleared = false
-                        let model = Model(name: modelName, url: modelUrl, filename: filename, status: "downloaded")
-                        self?.downloadedModels.append(model)
+                        guard let self else { return }
+                        self.cleanupDownload(filename: filename)
+                        self.cacheCleared = false
+                        self.registerDownloadedModel(filename: filename, fallbackName: modelName, url: modelUrl)
                     }
                 }
             } catch {
@@ -393,6 +394,25 @@ class LlamaState: ObservableObject {
         self.contextSize = saved > 0 ? UInt32(saved) : 4096
         loadModelsFromDisk()
         loadDownloadableModels()
+        if downloadedModels.isEmpty {
+            downloadDefaultModel()
+        }
+    }
+
+    private func catalogModel(forFilename filename: String) -> Model? {
+        downloadableModels.first { $0.filename == filename }
+    }
+
+    private func registerDownloadedModel(filename: String, fallbackName: String, url: String = "") {
+        guard !downloadedModels.contains(where: { $0.filename == filename }) else { return }
+        if let catalog = catalogModel(forFilename: filename) {
+            var entry = catalog
+            entry.status = "downloaded"
+            downloadedModels.append(entry)
+        } else {
+            downloadedModels.append(Model(name: fallbackName, url: url, filename: filename, status: "downloaded"))
+        }
+        undownloadedModels.removeAll { $0.filename == filename }
     }
 
     private func loadModelsFromDisk() {
@@ -409,15 +429,13 @@ class LlamaState: ObservableObject {
                     print("Removed corrupt/partial model: \(modelURL.lastPathComponent) (\(size) bytes)")
                     continue
                 }
-                let modelName = modelURL.deletingPathExtension().lastPathComponent
-                downloadedModels.append(Model(name: modelName, url: "", filename: modelURL.lastPathComponent, status: "downloaded"))
+                let fallbackName = modelURL.deletingPathExtension().lastPathComponent
+                registerDownloadedModel(filename: modelURL.lastPathComponent, fallbackName: fallbackName)
             }
 
-            if modelURLs.count > 0 {
-                do {
-                    try loadModel(modelUrl: modelURLs[0])
-                } catch {
-                    print("Error loading model")
+            if let firstURL = modelURLs.first {
+                Task {
+                    try? await loadModel(modelUrl: firstURL)
                 }
             }
         } catch {
@@ -429,12 +447,14 @@ class LlamaState: ObservableObject {
         for model in downloadableModels {
             let fileURL = getDocumentsDirectory().appendingPathComponent(model.filename)
             if FileManager.default.fileExists(atPath: fileURL.path) {
-
+                registerDownloadedModel(filename: model.filename, fallbackName: model.name, url: model.url)
             } else {
                 var undownloadedModel = model
                 undownloadedModel.status = "download"
                 undownloadedModel.rec = canRunModel(model.name)
-                undownloadedModels.append(undownloadedModel)
+                if !undownloadedModels.contains(where: { $0.filename == model.filename }) {
+                    undownloadedModels.append(undownloadedModel)
+                }
             }
         }
     }
@@ -466,14 +486,23 @@ class LlamaState: ObservableObject {
             do {
                 if let temporaryURL = temporaryURL {
                     try FileManager.default.copyItem(at: temporaryURL, to: fileURL)
-                    print("Default model downloaded: \(model.filename)")
+
+                    let attrs = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+                    let size = attrs[.size] as? Int64 ?? 0
+                    if size < 1_000_000 {
+                        try FileManager.default.removeItem(at: fileURL)
+                        print("Default model download too small, likely corrupt — removed")
+                        Task { @MainActor in self?.finishDefaultDownload() }
+                        return
+                    }
+
+                    print("Default model downloaded: \(model.filename) (\(size) bytes)")
 
                     Task { @MainActor [weak self] in
                         guard let self else { return }
                         self.finishDefaultDownload()
-                        self.downloadedModels.append(Model(name: model.name, url: model.url, filename: model.filename, status: "downloaded"))
-                        self.undownloadedModels.removeAll { $0.filename == model.filename }
-                        try? self.loadModel(modelUrl: fileURL)
+                        self.registerDownloadedModel(filename: model.filename, fallbackName: model.name, url: model.url)
+                        try? await self.loadModel(modelUrl: fileURL)
                     }
                 }
             } catch {
@@ -510,6 +539,10 @@ class LlamaState: ObservableObject {
     private let downloadableModels: [Model] = [
         LlamaState.defaultModel,
 
+        Model(name: "Phi-4 Mini Instruct Q4 (2.3 GiB)",
+              url: "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf?download=true",
+              filename: "Phi-4-mini-instruct-Q4_K_M.gguf", status: "download"),
+
         Model(name: "LFM2.5-1.2B Instruct Q8 (1.3 GiB)",
               url: "https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF/resolve/main/LFM2.5-1.2B-Instruct-Q8_0.gguf?download=true",
               filename: "LFM2.5-1.2B-Instruct-Q8_0.gguf", status: "download"),
@@ -540,57 +573,57 @@ class LlamaState: ObservableObject {
         let documentsURL = getDocumentsDirectory()
         let allFiles = (try? FileManager.default.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil)) ?? []
         if let modelURL = allFiles.first(where: { $0.deletingPathExtension().lastPathComponent == currentModelName }) {
-            try? loadModel(modelUrl: modelURL)
+            Task { try? await loadModel(modelUrl: modelURL) }
         }
     }
 
-    func loadModel(modelUrl: URL?) throws {
-        if let modelUrl {
-            Task {
-                do {
-                    // Stop any active generation before switching models
-                    if isGenerating {
-                        await stop()
-                    }
-                    // Save current conversation before clearing
-                    saveCurrentConversation()
+    func loadModel(modelUrl: URL) async throws {
+        if isGenerating {
+            await stop()
+        }
+        saveCurrentConversation()
 
-                    self.isLoadingModel = true
-                    self.modelLoadProgress = 0.0
+        isLoadingModel = true
+        modelLoadProgress = 0.0
+        modelLoadError = nil
 
-                    // Fully release the old engine before allocating a new one
-                    // to avoid two models coexisting in RAM → OOM
-                    await inferenceEngine?.deinitialize()
-                    inferenceEngine = nil
+        await inferenceEngine?.deinitialize()
+        inferenceEngine = nil
 
-                    let engine = LlamaCppEngine()
-                    inferenceEngine = engine
-                    try await engine.initialize(modelPath: modelUrl.path(), contextSize: self.contextSize) { [weak self] progress in
-                        DispatchQueue.main.async {
-                            self?.modelLoadProgress = Double(progress)
-                        }
-                    }
-
-                    await MainActor.run {
-                        self.isLoadingModel = false
-                        self.messages = []
-                        self.updateDownloadedModels(modelName: modelUrl.lastPathComponent, status: "downloaded")
-                        let modelName = modelUrl.deletingPathExtension().lastPathComponent
-                        self.currentModelName = modelName
-                        print("Loaded model")
-                    }
-                } catch {
-                    await MainActor.run {
-                        self.isLoadingModel = false
-                        print("Error loading model: \(error.localizedDescription)")
-                    }
+        let engine = LlamaCppEngine()
+        inferenceEngine = engine
+        do {
+            try await engine.initialize(modelPath: modelUrl.path(), contextSize: contextSize) { [weak self] progress in
+                Task { @MainActor in
+                    self?.modelLoadProgress = Double(progress)
                 }
             }
+        } catch {
+            isLoadingModel = false
+            modelLoadError = error.localizedDescription
+            inferenceEngine = nil
+            throw error
         }
+
+        isLoadingModel = false
+        messages = []
+        registerDownloadedModel(
+            filename: modelUrl.lastPathComponent,
+            fallbackName: modelUrl.deletingPathExtension().lastPathComponent
+        )
+        currentModelName = modelUrl.deletingPathExtension().lastPathComponent
+        print("Loaded model")
     }
 
-    private func updateDownloadedModels(modelName: String, status: String) {
-        undownloadedModels.removeAll { $0.name == modelName }
+    private func chatMessagesForInference() -> [(role: String, content: String)] {
+        var chatMessages: [(role: String, content: String)] = []
+        if !systemPrompt.isEmpty {
+            chatMessages.append((role: "system", content: systemPrompt))
+        }
+        for msg in messages {
+            chatMessages.append((role: msg.isUser ? "user" : "assistant", content: msg.content))
+        }
+        return chatMessages
     }
 
     func restoreToUndownloaded(filename: String) {
@@ -677,7 +710,22 @@ class LlamaState: ObservableObject {
             try await inferenceEngine.generateNext(messages: chatMessages)
 
             while await !inferenceEngine.isComplete && !isStopped {
-                if let token = try? await inferenceEngine.streamToken() {
+                let token: String?
+                do {
+                    token = try await inferenceEngine.streamToken()
+                } catch {
+                    await MainActor.run {
+                        self.currentResponse = "Error: Inference failed (\(error.localizedDescription))"
+                        let errorMessage = ChatMessage(content: self.currentResponse, isUser: false, timestamp: Date())
+                        self.messages.append(errorMessage)
+                        self.currentResponse = ""
+                        self.isThinking = false
+                        self.isGenerating = false
+                        self.saveCurrentConversation()
+                    }
+                    return
+                }
+                if let token {
                     rawResponseParts.append(token)
                     let filtered = tokenFilter.process(token)
                     if !filtered.isEmpty {
@@ -724,11 +772,7 @@ class LlamaState: ObservableObject {
             }
 
             // Keep KV cache for prefix reuse on next turn
-            if let cppEngine = inferenceEngine as? LlamaCppEngine {
-                await cppEngine.clearGenerationState()
-            } else {
-                await inferenceEngine.clear()
-            }
+            await inferenceEngine.clearGenerationState()
 
             rawResponse = rawResponseParts.joined()
             let savedRaw = rawResponse
@@ -819,9 +863,12 @@ class LlamaState: ObservableObject {
     let modelRequirements: [String: Double] = [
         "LFM2.5-1.2B Instruct Q8 (1.3 GiB)": 1.3,
         "LFM2.5-1.2B Thinking Q8 (1.3 GiB)": 1.3,
-        "SmolLM3-3B Q4 (1.9 GiB)": 1.9,
+        "SmolLM3-3B Q4 (1.8 GiB)": 1.9,
+        "Phi-4 Mini Instruct Q4 (2.3 GiB)": 2.5,
         "Ministral-3B Instruct Q4 (2.2 GiB)": 2.2,
-        "Ministral-3B Reasoning Q4 (2.2 GiB)": 2.2
+        "Ministral-3B Reasoning Q4 (2.2 GiB)": 2.2,
+        "Gemma 4 E2B Instruct Q4 (2.9 GiB)": 3.0,
+        "Gemma 4 E2B Instruct Q8 (4.6 GiB)": 5.0
     ]
 
     func canRunModel(_ modelName: String) -> Bool {
@@ -844,8 +891,10 @@ class LlamaState: ObservableObject {
             (role: "user", content: "Generate a short title for this conversation.")
         ]
 
+        let conversationMessages = chatMessagesForInference()
+
         do {
-            await inferenceEngine.clear()
+            await inferenceEngine.clearGenerationState()
             await inferenceEngine.resume()
             try await inferenceEngine.generateNext(messages: titleMessages)
 
@@ -854,7 +903,7 @@ class LlamaState: ObservableObject {
             var titleResult = ""
 
             while await !inferenceEngine.isComplete {
-                if let token = try? await inferenceEngine.streamToken() {
+                if let token = try await inferenceEngine.streamToken() {
                     let filtered = titleFilter.process(token)
                     if !filtered.isEmpty {
                         let display = titleThinkStripper.process(filtered)
@@ -871,7 +920,13 @@ class LlamaState: ObservableObject {
             // Flush
             let flush = titleFilter.flush()
             titleResult += titleThinkStripper.process(flush) + titleThinkStripper.flush()
-            await inferenceEngine.clear()
+
+            // Restore KV cache for the user's conversation
+            if !conversationMessages.isEmpty {
+                try await inferenceEngine.encodePrompt(messages: conversationMessages)
+            } else {
+                await inferenceEngine.clearGenerationState()
+            }
 
             // Clean up the title
             var title = titleResult

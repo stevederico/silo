@@ -148,6 +148,11 @@ struct ModelPickerSheet: View {
         name.prefix(1).uppercased() + name.dropFirst()
     }
 
+    private func isActiveModel(_ model: Model) -> Bool {
+        let stem = model.filename.replacingOccurrences(of: ".gguf", with: "")
+        return stem == currentModel || model.name == currentModel
+    }
+
     var body: some View {
         NavigationView {
             List {
@@ -157,7 +162,7 @@ struct ModelPickerSheet: View {
                             Text(capitalizedName(model.name))
                                 .foregroundColor(.primary)
                             Spacer()
-                            if model.name == currentModel {
+                            if isActiveModel(model) {
                                 Image(systemName: "checkmark")
                                     .foregroundColor(.primary)
                             }
