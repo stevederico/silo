@@ -532,12 +532,16 @@ class LlamaState: ObservableObject {
     }
 
     static let defaultModel = Model(
-        name: "SmolLM3-3B Q4 (1.8 GiB)",
-        url: "https://huggingface.co/unsloth/SmolLM3-3B-GGUF/resolve/main/SmolLM3-3B-Q4_K_M.gguf?download=true",
-        filename: "SmolLM3-3B-Q4_K_M.gguf", status: "download")
+        name: "Gemma 4 E2B Instruct Q4 (2.9 GiB)",
+        url: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf?download=true",
+        filename: "gemma-4-E2B-it-Q4_K_M.gguf", status: "download")
 
     private let downloadableModels: [Model] = [
         LlamaState.defaultModel,
+
+        Model(name: "SmolLM3-3B Q4 (1.8 GiB)",
+              url: "https://huggingface.co/unsloth/SmolLM3-3B-GGUF/resolve/main/SmolLM3-3B-Q4_K_M.gguf?download=true",
+              filename: "SmolLM3-3B-Q4_K_M.gguf", status: "download"),
 
         Model(name: "Phi-4 Mini Instruct Q4 (2.3 GiB)",
               url: "https://huggingface.co/unsloth/Phi-4-mini-instruct-GGUF/resolve/main/Phi-4-mini-instruct-Q4_K_M.gguf?download=true",
@@ -558,10 +562,6 @@ class LlamaState: ObservableObject {
         Model(name: "Ministral-3B Reasoning Q4 (2.2 GiB)",
               url: "https://huggingface.co/mistralai/Ministral-3-3B-Reasoning-2512-GGUF/resolve/main/Ministral-3-3B-Reasoning-2512-Q4_K_M.gguf?download=true",
               filename: "Ministral-3-3B-Reasoning-2512-Q4_K_M.gguf", status: "download"),
-
-        Model(name: "Gemma 4 E2B Instruct Q4 (2.9 GiB)",
-              url: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf?download=true",
-              filename: "gemma-4-E2B-it-Q4_K_M.gguf", status: "download"),
 
         Model(name: "Gemma 4 E2B Instruct Q8 (4.6 GiB)",
               url: "https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q8_0.gguf?download=true",
