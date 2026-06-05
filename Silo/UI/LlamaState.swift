@@ -1050,7 +1050,13 @@ class LlamaState: ObservableObject {
                 return
             }
 
-            try await inferenceEngine.generateNext(messages: chatMessages)
+            do {
+                try await inferenceEngine.generateNext(messages: chatMessages)
+            } catch {
+                guard case LlamaError.decodeFailed = error else { throw error }
+                await inferenceEngine.clear()
+                try await inferenceEngine.generateNext(messages: chatMessages)
+            }
 
             while await !inferenceEngine.isComplete && !isStopped {
                 let token: String?

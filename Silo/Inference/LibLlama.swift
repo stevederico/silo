@@ -15,7 +15,7 @@ enum LlamaError: Error, LocalizedError {
             return "Could not load \(name). The file may be corrupt or too large for available memory. Try another model in Manage Models."
             #endif
         case .decodeFailed:
-            return "Model inference failed while decoding."
+            return "Model inference failed while decoding. Try New Chat, or send again."
         }
     }
 }
@@ -199,10 +199,13 @@ actor LlamaContext {
         return batch.n_tokens;
     }
 
-    func completion_init(text: String) {
+    func completion_init(text: String) throws {
         is_done = false
-        tokens_list = tokenize(text: text, add_bos: false, parse_special: true)
         temporary_invalid_cchars = []
+        entropyWindow.removeAll()
+        tokens_list = tokenize(text: text, add_bos: false, parse_special: true)
+
+        llama_memory_clear(llama_get_memory(context), true)
 
         let chunkSize = 512
         for chunkStart in stride(from: 0, to: tokens_list.count, by: chunkSize) {
@@ -217,10 +220,12 @@ actor LlamaContext {
 
             if llama_decode(context, batch) != 0 {
                 print("llama_decode() failed at chunk starting at position \(chunkStart)")
-                return
+                is_done = true
+                throw LlamaError.decodeFailed
             }
         }
 
+        previousTokens = tokens_list
         n_cur = Int32(tokens_list.count)
     }
 
@@ -674,7 +679,11 @@ actor LlamaContext {
         tokens_list.removeAll()
         temporary_invalid_cchars.removeAll()
         entropyWindow.removeAll()
-        // Keep KV cache and previousTokens for prefix reuse
+        previousTokens.removeAll()
+        n_cur = 0
+        is_done = true
+        // Clear KV between turns — re-tokenized assistant text won't match cached tokens.
+        llama_memory_clear(llama_get_memory(context), true)
     }
 
     private func tokenize(text: String, add_bos: Bool, parse_special: Bool = false) -> [llama_token] {
