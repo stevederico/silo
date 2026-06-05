@@ -144,12 +144,16 @@ actor LlamaContext {
             throw LlamaError.couldNotInitializeContext(path: path)
         }
 
+        #if targetEnvironment(simulator)
+        let n_threads = max(1, min(4, ProcessInfo.processInfo.processorCount - 2))
+        #else
         let n_threads = max(1, min(8, ProcessInfo.processInfo.processorCount - 2))
+        #endif
         // print("Using \(n_threads) threads")
 
         var ctx_params = llama_context_default_params()
         #if targetEnvironment(simulator)
-        let effectiveContext = min(contextSize, 2048)
+        let effectiveContext = min(contextSize, 1536)
         #else
         let effectiveContext = contextSize
         #endif

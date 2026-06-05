@@ -419,18 +419,87 @@ class LlamaState: ObservableObject {
         guard !ggufs.isEmpty else { return nil }
 
         #if targetEnvironment(simulator)
-        // Simulator: prefer the smallest GGUF to avoid OOM load failures.
-        if let smallest = ggufs.min(by: { fileSize(at: $0) < fileSize(at: $1) }) {
+        let loadable = ggufs.filter { fileSize(at: $0) <= Self.simulatorMaxModelBytes }
+        if let smallest = loadable.min(by: { fileSize(at: $0) < fileSize(at: $1) }) {
             return smallest
         }
-        #endif
+        return nil
+        #else
 
         if !currentModelName.isEmpty,
            let match = ggufs.first(where: { $0.deletingPathExtension().lastPathComponent == currentModelName }) {
             return match
         }
         return ggufs.first
+        #endif
     }
+
+    #if targetEnvironment(simulator)
+    private func bootstrapSimulatorModelIfNeeded() async {
+        if resolveModelFileURL() != nil {
+            if !isModelLoaded {
+                _ = await ensureModelLoaded()
+            }
+            return
+        }
+        // Only oversized models on disk (e.g. Gemma 4) — fetch a Simulator-friendly default.
+        modelLoadError = "Gemma 4 is too large for Simulator. Downloading LFM2.5 (1.2 GB)…"
+        let lfm = Self.lfmSimulatorModel
+        if !FileManager.default.fileExists(atPath: getDocumentsDirectory().appendingPathComponent(lfm.filename).path) {
+            downloadModel(lfm)
+        }
+    }
+
+    func downloadModel(_ model: Model) {
+        guard let url = URL(string: model.url) else { return }
+        let filename = model.filename
+        guard activeDownloads[filename] == nil else { return }
+
+        let fileURL = getDocumentsDirectory().appendingPathComponent(filename)
+        try? FileManager.default.removeItem(at: fileURL)
+
+        activeDownloads[filename] = 0.0
+        pendingDownloadMeta[filename] = (name: model.name, url: model.url)
+
+        let task = URLSession.shared.downloadTask(with: url) { [weak self] temporaryURL, response, error in
+            guard let self else { return }
+            if let error = error as? NSError, error.code == NSURLErrorCancelled {
+                Task { @MainActor in self.cleanupDownload(filename: filename) }
+                return
+            }
+            if error != nil {
+                Task { @MainActor in self.cleanupDownload(filename: filename) }
+                return
+            }
+            guard let response = response as? HTTPURLResponse, (200...299).contains(response.statusCode),
+                  let temporaryURL = temporaryURL else {
+                Task { @MainActor in self.cleanupDownload(filename: filename) }
+                return
+            }
+            do {
+                try FileManager.default.copyItem(at: temporaryURL, to: fileURL)
+                let size = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? Int64) ?? 0
+                if size < 1_000_000 {
+                    try? FileManager.default.removeItem(at: fileURL)
+                    Task { @MainActor in self.cleanupDownload(filename: filename) }
+                    return
+                }
+                Task { @MainActor in
+                    self.cleanupDownload(filename: filename)
+                    self.registerDownloadedModel(filename: filename, fallbackName: model.name, url: model.url)
+                    try? await self.loadModel(modelUrl: fileURL)
+                }
+            } catch {
+                Task { @MainActor in self.cleanupDownload(filename: filename) }
+            }
+        }
+        downloadTasks[filename] = task
+        downloadObservations[filename] = task.progress.observe(\.fractionCompleted) { [weak self] progress, _ in
+            Task { @MainActor in self?.activeDownloads[filename] = progress.fractionCompleted }
+        }
+        task.resume()
+    }
+    #endif
 
     private func initializeEngine(at modelURL: URL) async throws {
         let engine = LlamaCppEngine()
@@ -462,7 +531,12 @@ class LlamaState: ObservableObject {
         }
 
         guard let modelURL = resolveModelFileURL() else {
+            #if targetEnvironment(simulator)
+            modelLoadError = "No Simulator-sized model found. Open Manage Models and download LFM2.5 (1.2 GB), or wait for the automatic download."
+            Task { await bootstrapSimulatorModelIfNeeded() }
+            #else
             modelLoadError = "No model file found on device."
+            #endif
             return false
         }
 
@@ -493,13 +567,24 @@ class LlamaState: ObservableObject {
         self.systemPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? ""
         self.speakRepliesEnabled = UserDefaults.standard.bool(forKey: "speakRepliesEnabled")
         let saved = UserDefaults.standard.integer(forKey: "contextSize")
+        #if targetEnvironment(simulator)
+        self.contextSize = saved > 0 ? UInt32(min(saved, 2048)) : 2048
+        #else
         self.contextSize = saved > 0 ? UInt32(saved) : 4096
+        #endif
         loadModelsFromDisk()
         loadDownloadableModels()
         if downloadedModels.isEmpty {
             downloadDefaultModel()
+        } else {
+            Task { await bootstrapSimulatorModelIfNeeded() }
         }
     }
+
+    #if targetEnvironment(simulator)
+    /// GGUF larger than this usually fails to load in Simulator (use LFM2.5 instead).
+    private static let simulatorMaxModelBytes: Int64 = 1_600_000_000
+    #endif
 
     private func catalogModel(forFilename filename: String) -> Model? {
         downloadableModels.first { $0.filename == filename }
@@ -535,9 +620,9 @@ class LlamaState: ObservableObject {
                 registerDownloadedModel(filename: modelURL.lastPathComponent, fallbackName: fallbackName)
             }
 
-            if let firstURL = modelURLs.first {
+            if let url = resolveModelFileURL() {
                 Task {
-                    try? await loadModel(modelUrl: firstURL)
+                    try? await loadModel(modelUrl: url)
                 }
             }
         } catch {
@@ -566,7 +651,7 @@ class LlamaState: ObservableObject {
     private var defaultDownloadObservation: NSKeyValueObservation?
 
     private func downloadDefaultModel() {
-        let model = LlamaState.defaultModel
+        let model = Self.defaultModelForPlatform
         guard let url = URL(string: model.url) else { return }
         let fileURL = getDocumentsDirectory().appendingPathComponent(model.filename)
 
@@ -653,6 +738,21 @@ class LlamaState: ObservableObject {
         filename: "gemma-4-E2B-it-Q4_K_M.gguf",
         status: "download",
         released: catalogDate(2026, 4, 2))
+
+    static let lfmSimulatorModel = Model(
+        name: "LFM2.5-1.2B Instruct Q8 (1.2 GiB)",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF/resolve/main/LFM2.5-1.2B-Instruct-Q8_0.gguf?download=true",
+        filename: "LFM2.5-1.2B-Instruct-Q8_0.gguf",
+        status: "download",
+        released: catalogDate(2026, 1, 5))
+
+    static var defaultModelForPlatform: Model {
+        #if targetEnvironment(simulator)
+        return lfmSimulatorModel
+        #else
+        return defaultModel
+        #endif
+    }
 
     private static let allDownloadableModels: [Model] = [
         LlamaState.defaultModel,
