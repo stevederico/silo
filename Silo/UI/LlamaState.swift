@@ -944,6 +944,23 @@ class LlamaState: ObservableObject {
         conversationManager?.currentConversationId = conversation.id
     }
 
+    /// Removes video transcript context (e.g. when the user dismisses the banner).
+    func clearVideoTranscriptAttachment() {
+        conversationTranscript = nil
+        guard var conversation = currentConversation else { return }
+        conversation.transcript = nil
+        conversation.transcriptFilename = nil
+        if messages.count == 1,
+           let only = messages.first,
+           only.isUser,
+           only.content.contains("Interview transcript attached") {
+            messages = []
+            conversation.messages = []
+        }
+        currentConversation = conversation
+        conversationManager?.save(conversation)
+    }
+
     func restoreToUndownloaded(filename: String) {
         // Check if this model is from the predefined downloadable models
         if let model = downloadableModels.first(where: { $0.filename == filename }) {

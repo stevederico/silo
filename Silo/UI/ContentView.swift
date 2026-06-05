@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var videoPickerItem: PhotosPickerItem?
     @State private var showTranscript = false
     @State private var videoImportError: String?
+    @State private var showVideoTranscriptBanner = false
     @StateObject private var jobManager = TranscriptionJobManager()
     @StateObject private var voiceSession = VoiceSession()
     @FocusState private var isFocused: Bool
@@ -35,6 +36,7 @@ struct ContentView: View {
                         drawerOffset = 0
                     },
                     onNewChat: {
+                        dismissVideoTranscriptBanner()
                         Task {
                             await llamaState.clear()
                         }
@@ -82,6 +84,7 @@ struct ContentView: View {
                             Task { try? await llamaState.loadModel(modelUrl: fileURL) }
                         },
                         onNewChat: {
+                            dismissVideoTranscriptBanner()
                             Task {
                                 await llamaState.clear()
                             }
@@ -100,22 +103,12 @@ struct ContentView: View {
                             .padding(.top, 4)
                     }
 
-                    if jobManager.isRunning {
-                        TranscriptionProgressBanner(
-                            progress: jobManager.progress,
-                            message: jobManager.statusMessage,
-                            modelSuspended: llamaState.modelSuspendedForSpeech,
-                            onCancel: { jobManager.cancel() }
-                        )
-                    } else if let transcriptionError = jobManager.failureMessage {
-                        TranscriptionErrorBanner(
-                            message: transcriptionError,
-                            onDismiss: { jobManager.clearFailure() }
-                        )
-                    } else if llamaState.transcriptCharacterCount > 0 {
-                        TranscriptAttachmentBanner(
-                            characterCount: llamaState.transcriptCharacterCount,
-                            onViewTranscript: { showTranscript = true }
+                    if showVideoTranscriptBanner {
+                        VideoTranscriptBanner(
+                            phase: videoTranscriptBannerPhase,
+                            onViewTranscript: { showTranscript = true },
+                            onDismiss: dismissVideoTranscriptBanner,
+                            onCancelTranscription: jobManager.isRunning ? { jobManager.cancel() } : nil
                         )
                     }
 
@@ -206,7 +199,7 @@ struct ContentView: View {
                             .padding(.horizontal, 20)
                             .padding(.bottom, 4)
                     }
-                    if let videoImportError {
+                    if let videoImportError, !showVideoTranscriptBanner {
                         Text(videoImportError)
                             .font(.caption)
                             .foregroundStyle(.red)
@@ -297,17 +290,49 @@ struct ContentView: View {
         }
         .onChange(of: videoPickerItem) { _, newItem in
             guard let newItem else { return }
+            showVideoTranscriptBanner = true
+            jobManager.clearFailure()
+            videoImportError = nil
             Task { await handlePickedVideo(newItem) }
         }
-        .onChange(of: jobManager.failureMessage) { _, message in
-            videoImportError = message
+    }
+
+    private var videoTranscriptBannerPhase: VideoTranscriptBanner.Phase {
+        if let failure = jobManager.failureMessage {
+            return .failed(message: failure)
         }
+        if jobManager.isRunning {
+            return .transcribing(
+                progress: jobManager.progress,
+                message: jobManager.statusMessage,
+                modelSuspended: llamaState.modelSuspendedForSpeech
+            )
+        }
+        if llamaState.transcriptCharacterCount > 0 {
+            return .ready(characterCount: llamaState.transcriptCharacterCount)
+        }
+        if let videoImportError {
+            return .failed(message: videoImportError)
+        }
+        if jobManager.statusMessage == "Cancelled" {
+            return .failed(message: "Cancelled")
+        }
+        return .preparing
+    }
+
+    private func dismissVideoTranscriptBanner() {
+        if jobManager.isRunning {
+            jobManager.cancel()
+        }
+        jobManager.clearFailure()
+        videoImportError = nil
+        showVideoTranscriptBanner = false
+        llamaState.clearVideoTranscriptAttachment()
     }
 
     @MainActor
     private func handlePickedVideo(_ item: PhotosPickerItem) async {
         videoPickerItem = nil
-        videoImportError = nil
         do {
             guard let movie = try await item.loadTransferable(type: ImportedVideoFile.self) else {
                 videoImportError = "Could not load video from Photos."
@@ -316,6 +341,7 @@ struct ContentView: View {
             _ = try await jobManager.startJob(mediaURL: movie.url, llamaState: llamaState)
         } catch {
             videoImportError = error.localizedDescription
+            jobManager.clearFailure()
         }
     }
 
