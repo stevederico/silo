@@ -53,7 +53,7 @@ enum TranscriptionCheckpointStore {
 
     static func save(_ checkpoint: TranscriptionCheckpoint) throws {
         let url = checkpointURL(checkpoint.jobId)
-        try ensureJobDirectory(checkpoint.jobId)
+        _ = try ensureJobDirectory(checkpoint.jobId)
         let data = try JSONEncoder().encode(checkpoint)
         try data.write(to: url, options: .atomic)
     }

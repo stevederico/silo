@@ -36,27 +36,22 @@ enum AudioExtractor {
         guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A) else {
             throw AudioExtractorError.exportFailed("export session unavailable")
         }
-        export.outputURL = outputURL
-        export.outputFileType = .m4a
         export.timeRange = CMTimeRange(start: .zero, duration: try await asset.load(.duration))
 
-        await export.export()
-
-        switch export.status {
-        case .completed:
-            let seconds = try await secondsOfAudio(at: outputURL)
-            guard seconds >= 0.3 else {
-                throw AudioExtractorError.exportFailed("audio track is too short or silent")
-            }
-            return outputURL
-        case .failed, .cancelled:
-            throw AudioExtractorError.exportFailed(export.error?.localizedDescription ?? "unknown error")
-        default:
-            throw AudioExtractorError.exportFailed("export did not complete")
+        do {
+            try await export.export(to: outputURL, as: .m4a)
+        } catch {
+            throw AudioExtractorError.exportFailed(error.localizedDescription)
         }
+
+        let seconds = try await secondsOfAudio(at: outputURL)
+        guard seconds >= 0.3 else {
+            throw AudioExtractorError.exportFailed("audio track is too short or silent")
+        }
+        return outputURL
     }
 
-    /// Returns one or more audio file URLs suitable for Apple Speech (chunked when long).
+    /// Returns one or more audio file URLs (chunked when long). Used for both legacy and whisper sample loading.
     static func preparedChunks(from audioURL: URL) async throws -> [URL] {
         let asset = AVURLAsset(url: audioURL)
         let duration = try await asset.load(.duration)
@@ -91,14 +86,12 @@ enum AudioExtractor {
         }
         let start = CMTime(seconds: startSeconds, preferredTimescale: 600)
         let end = CMTime(seconds: endSeconds, preferredTimescale: 600)
-        export.outputURL = outputURL
-        export.outputFileType = .m4a
         export.timeRange = CMTimeRange(start: start, end: end)
 
-        await export.export()
-
-        guard export.status == .completed else {
-            throw AudioExtractorError.exportFailed(export.error?.localizedDescription ?? "chunk failed")
+        do {
+            try await export.export(to: outputURL, as: .m4a)
+        } catch {
+            throw AudioExtractorError.exportFailed(error.localizedDescription)
         }
         return outputURL
     }
@@ -108,5 +101,72 @@ enum AudioExtractor {
         let duration = try await asset.load(.duration)
         let seconds = CMTimeGetSeconds(duration)
         return seconds.isFinite ? seconds : 0
+    }
+
+    // MARK: - whisper.cpp support (16kHz mono float32 PCM)
+
+    /// Loads the audio as 16 kHz mono Float32 samples ready for whisper.cpp.
+    /// Handles video files, M4A, etc. Resamples if necessary.
+    static func loadWhisperSamples(from sourceURL: URL) async throws -> [Float] {
+        let asset = AVURLAsset(url: sourceURL)
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        guard !audioTracks.isEmpty else {
+            throw AudioExtractorError.noAudioTrack
+        }
+
+        // Target format for whisper.cpp: 16kHz, mono, float32
+        let outputSettings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: 16000,
+            AVNumberOfChannelsKey: 1,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false
+        ]
+
+        guard let reader = try? AVAssetReader(asset: asset),
+              let track = audioTracks.first else {
+            throw AudioExtractorError.exportFailed("Failed to create AVAssetReader for Whisper samples")
+        }
+
+        let output = AVAssetReaderAudioMixOutput(audioTracks: [track], audioSettings: outputSettings)
+        reader.add(output)
+
+        guard reader.startReading() else {
+            throw AudioExtractorError.exportFailed("AVAssetReader failed to start")
+        }
+
+        var samples: [Float] = []
+
+        while let buffer = output.copyNextSampleBuffer() {
+            guard let blockBuffer = CMSampleBufferGetDataBuffer(buffer) else { continue }
+
+            var length = 0
+            var dataPointer: UnsafeMutablePointer<Int8>?
+            CMBlockBufferGetDataPointer(blockBuffer, atOffset: 0, lengthAtOffsetOut: nil, totalLengthOut: &length, dataPointerOut: &dataPointer)
+
+            if let data = dataPointer {
+                let floatCount = length / MemoryLayout<Float>.size
+                let floatBuffer = UnsafeBufferPointer(start: UnsafeRawPointer(data).assumingMemoryBound(to: Float.self), count: floatCount)
+                samples.append(contentsOf: Array(floatBuffer))
+            }
+        }
+
+        if samples.isEmpty {
+            throw AudioExtractorError.exportFailed("No audio samples extracted")
+        }
+
+        return samples
+    }
+
+    /// Loads samples for a time range (for chunked long audio).
+    static func loadWhisperSamples(from sourceURL: URL, startSeconds: Double, endSeconds: Double) async throws -> [Float] {
+        // For simplicity in first pass, load full and slice (can optimize later with timeRange on reader)
+        let full = try await loadWhisperSamples(from: sourceURL)
+        let sampleRate: Double = 16000
+        let startIndex = max(0, Int(startSeconds * sampleRate))
+        let endIndex = min(full.count, Int(endSeconds * sampleRate))
+        return Array(full[startIndex..<endIndex])
     }
 }

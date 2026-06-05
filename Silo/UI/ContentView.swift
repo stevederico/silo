@@ -106,6 +106,7 @@ struct ContentView: View {
                     if showVideoTranscriptBanner {
                         VideoTranscriptBanner(
                             phase: videoTranscriptBannerPhase,
+                            thumbnail: jobManager.videoThumbnail ?? llamaState.attachedVideoThumbnail,
                             onViewTranscript: { showTranscript = true },
                             onDismiss: dismissVideoTranscriptBanner,
                             onCancelTranscription: jobManager.isRunning ? { jobManager.cancel() } : nil
@@ -122,8 +123,17 @@ struct ContentView: View {
                             ScrollView {
                                 LazyVStack(spacing: 12) {
                                     ForEach(llamaState.messages) { message in
-                                        MessageBubble(message: message)
+                                        if message.isVideoTranscriptAttachment {
+                                            VideoTranscriptMessageBubble(
+                                                characterCount: llamaState.transcriptCharacterCount,
+                                                thumbnail: llamaState.attachedVideoThumbnail ?? jobManager.videoThumbnail,
+                                                onTap: { showTranscript = true }
+                                            )
                                             .id(message.id)
+                                        } else {
+                                            MessageBubble(message: message)
+                                                .id(message.id)
+                                        }
                                     }
 
                                     if llamaState.isGenerating && llamaState.isThinking && llamaState.currentResponse.isEmpty {
@@ -257,9 +267,7 @@ struct ContentView: View {
                 matching: .videos
             )
             .sheet(isPresented: $showTranscript) {
-                if let text = llamaState.resolvedTranscriptText() {
-                    TranscriptView(transcript: text, title: "Transcript")
-                }
+                TranscriptSheetLoader(llamaState: llamaState)
             }
         }
         .background(Color(.systemBackground))

@@ -1,6 +1,9 @@
 import Foundation
 import Speech
 
+// DEPRECATED: Apple SFSpeech no longer used for transcription (switched to whisper.cpp).
+// Kept for reference / possible future live fallback. Remove in future cleanup.
+
 enum LocalSpeechError: LocalizedError {
     case notAuthorized
     case onDeviceUnavailable

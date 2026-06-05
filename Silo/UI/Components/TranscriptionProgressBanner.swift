@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct TranscriptionProgressBanner: View {
     let progress: Double
@@ -68,6 +69,7 @@ struct VideoTranscriptBanner: View {
     }
 
     let phase: Phase
+    var thumbnail: UIImage?
     let onViewTranscript: () -> Void
     let onDismiss: () -> Void
     let onCancelTranscription: (() -> Void)?
@@ -81,8 +83,7 @@ struct VideoTranscriptBanner: View {
         HStack(alignment: .top, spacing: 10) {
             Button(action: onViewTranscript) {
                 HStack(spacing: 8) {
-                    Image(systemName: iconName)
-                        .foregroundStyle(isFailed ? .red : .primary)
+                    leadingVisual
                     VStack(alignment: .leading, spacing: 4) {
                         Text(title)
                             .font(.subheadline.weight(.medium))
@@ -127,6 +128,22 @@ struct VideoTranscriptBanner: View {
         .cornerRadius(12)
         .padding(.horizontal, 12)
         .padding(.top, 4)
+    }
+
+    @ViewBuilder
+    private var leadingVisual: some View {
+        if let thumbnail, !isFailed {
+            Image(uiImage: thumbnail)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+        } else {
+            Image(systemName: iconName)
+                .font(.title3)
+                .foregroundStyle(isFailed ? .red : .primary)
+                .frame(width: 44, height: 44)
+        }
     }
 
     private var iconName: String {
@@ -176,6 +193,7 @@ struct TranscriptAttachmentBanner: View {
     var body: some View {
         VideoTranscriptBanner(
             phase: .ready(characterCount: characterCount),
+            thumbnail: nil,
             onViewTranscript: onViewTranscript,
             onDismiss: {},
             onCancelTranscription: nil
