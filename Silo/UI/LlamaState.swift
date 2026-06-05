@@ -808,6 +808,13 @@ class LlamaState: ObservableObject {
             return
         }
         guard let inferenceEngine else {
+            let notice = ChatMessage(
+                content: "No model is loaded. Open Manage Models to download or select a model, then try again.",
+                isUser: false,
+                timestamp: Date()
+            )
+            messages.append(notice)
+            saveCurrentConversation()
             return
         }
 

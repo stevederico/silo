@@ -13,6 +13,7 @@ final class VoiceSession: ObservableObject {
     private var recognitionTask: SFSpeechRecognitionTask?
     private var recognizer: SFSpeechRecognizer?
     private var finalizedTranscript = ""
+    private var isStopping = false
 
     func startListening() async throws {
         errorMessage = nil
@@ -49,9 +50,8 @@ final class VoiceSession: ObservableObject {
                         self.finalizedTranscript = text
                     }
                 }
-                if let error {
+                if let error, !self.isStopping {
                     self.errorMessage = error.localizedDescription
-                    Task { _ = await self.stopListening() }
                 }
             }
         }
@@ -63,14 +63,24 @@ final class VoiceSession: ObservableObject {
 
     func stopListening() async -> String {
         guard isListening else { return "" }
+        isStopping = true
+        defer { isStopping = false }
+
+        let snapshot = partialTranscript
 
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionRequest?.endAudio()
         recognitionTask?.finish()
 
-        // Final result often arrives shortly after finish().
-        try? await Task.sleep(for: .milliseconds(400))
+        // Wait for a final result; fall back to the last partial we already showed in the UI.
+        for _ in 0..<30 {
+            let candidate = finalizedTranscript.isEmpty ? partialTranscript : finalizedTranscript
+            if !candidate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
 
         recognitionRequest = nil
         recognitionTask = nil
@@ -79,7 +89,8 @@ final class VoiceSession: ObservableObject {
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
 
         let candidate = finalizedTranscript.isEmpty ? partialTranscript : finalizedTranscript
-        let final = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+        let merged = candidate.isEmpty ? snapshot : candidate
+        let final = merged.trimmingCharacters(in: .whitespacesAndNewlines)
         partialTranscript = ""
         finalizedTranscript = ""
         return final

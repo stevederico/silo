@@ -12,6 +12,7 @@ struct ContentView: View {
     @StateObject private var jobManager = TranscriptionJobManager()
     @StateObject private var voiceSession = VoiceSession()
     @FocusState private var isFocused: Bool
+    @State private var voiceErrorMessage: String?
 
     private let drawerWidth: CGFloat = 300
 
@@ -173,12 +174,19 @@ struct ContentView: View {
                         isGenerating: llamaState.isGenerating,
                         isListening: voiceSession.isListening,
                         inputsDisabled: llamaState.modelSuspendedForSpeech || llamaState.speechSynthesizer.isSpeaking,
-                        onSend: sendMessage,
+                        onSend: { Task { await submitMessage() } },
                         onStop: stopGeneration,
                         onVideoImport: { showVideoImport = true },
                         onVoiceToggle: { Task { await handleVoiceToggle() } },
                         focusState: $isFocused
                     )
+                    if let voiceErrorMessage {
+                        Text(voiceErrorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 4)
+                    }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .offset(x: drawerOffset)
@@ -240,42 +248,54 @@ struct ContentView: View {
             isFocused = true
         }
         .onChange(of: voiceSession.partialTranscript) { _, newValue in
-            if voiceSession.isListening {
+            guard voiceSession.isListening else { return }
+            if !newValue.isEmpty {
                 inputText = newValue
             }
         }
-        .onChange(of: voiceSession.isListening) { wasListening, isListening in
+        .onChange(of: voiceSession.isListening) { _, isListening in
             if isListening {
                 inputText = ""
-            } else if wasListening, !inputText.isEmpty {
-                // Text already synced from partial; send happens when user taps mic to stop.
+                voiceErrorMessage = nil
             }
+        }
+        .onChange(of: voiceSession.errorMessage) { _, message in
+            voiceErrorMessage = message
         }
     }
 
-    private func sendMessage() {
+    @MainActor
+    private func submitMessage() async {
         guard !llamaState.isGenerating else { return }
-        guard !llamaState.modelSuspendedForSpeech else { return }
 
-        Task {
-            if voiceSession.isListening {
-                let spoken = await voiceSession.stopListening()
-                if !spoken.isEmpty {
-                    inputText = spoken
-                }
-            }
-
-            let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty else { return }
-
-            if llamaState.downloadedModels.isEmpty {
-                showManageModels = true
-                return
-            }
-
-            inputText = ""
-            await llamaState.complete(text: text)
+        if llamaState.modelSuspendedForSpeech {
+            voiceErrorMessage = "Model is reloading after transcription. Wait a moment."
+            return
         }
+
+        if voiceSession.isListening {
+            let spoken = await voiceSession.stopListening()
+            if !spoken.isEmpty {
+                inputText = spoken
+            }
+        }
+
+        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            voiceErrorMessage = "No speech detected. Try again."
+            return
+        }
+
+        voiceErrorMessage = nil
+
+        if llamaState.downloadedModels.isEmpty {
+            showManageModels = true
+            return
+        }
+
+        let messageToSend = text
+        inputText = ""
+        await llamaState.complete(text: messageToSend)
     }
 
     private func stopGeneration() {
@@ -293,17 +313,18 @@ struct ContentView: View {
 
         if voiceSession.isListening {
             let spoken = await voiceSession.stopListening()
-            guard !spoken.isEmpty else { return }
-            inputText = spoken
-            sendMessage()
+            if !spoken.isEmpty {
+                inputText = spoken
+            }
+            await submitMessage()
             return
         }
         isFocused = false
-        inputText = ""
+        voiceErrorMessage = nil
         do {
             try await voiceSession.startListening()
         } catch {
-            voiceSession.errorMessage = error.localizedDescription
+            voiceErrorMessage = error.localizedDescription
         }
     }
 }
