@@ -21,7 +21,8 @@ enum AudioExtractor {
     /// Exports the media's audio track to a temporary M4A file.
     static func exportAudio(from sourceURL: URL) async throws -> URL {
         let asset = AVURLAsset(url: sourceURL)
-        guard !asset.tracks(withMediaType: .audio).isEmpty else {
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        guard !audioTracks.isEmpty else {
             throw AudioExtractorError.noAudioTrack
         }
 
@@ -43,6 +44,10 @@ enum AudioExtractor {
 
         switch export.status {
         case .completed:
+            let seconds = try await secondsOfAudio(at: outputURL)
+            guard seconds >= 0.3 else {
+                throw AudioExtractorError.exportFailed("audio track is too short or silent")
+            }
             return outputURL
         case .failed, .cancelled:
             throw AudioExtractorError.exportFailed(export.error?.localizedDescription ?? "unknown error")
@@ -96,5 +101,12 @@ enum AudioExtractor {
             throw AudioExtractorError.exportFailed(export.error?.localizedDescription ?? "chunk failed")
         }
         return outputURL
+    }
+
+    private static func secondsOfAudio(at url: URL) async throws -> Double {
+        let asset = AVURLAsset(url: url)
+        let duration = try await asset.load(.duration)
+        let seconds = CMTimeGetSeconds(duration)
+        return seconds.isFinite ? seconds : 0
     }
 }

@@ -121,7 +121,9 @@ final class TranscriptionJobManager: ObservableObject {
                 throw NSError(
                     domain: "TranscriptionJob",
                     code: 2,
-                    userInfo: [NSLocalizedDescriptionKey: "No speech detected in this file."]
+                    userInfo: [NSLocalizedDescriptionKey: """
+                    No speech detected. Use a video with clear spoken audio, check Speech permission in Settings, and download your language under Settings → General → Keyboard → Dictation (on-device).
+                    """]
                 )
             }
 

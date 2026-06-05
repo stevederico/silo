@@ -98,11 +98,33 @@ actor TranscriptionEngine {
             try? FileManager.default.removeItem(at: audioURL)
         }
 
-        let transcript: String
+        var transcript: String
         if let jobId, let saved = TranscriptionCheckpointStore.readTranscript(jobId: jobId) {
             transcript = saved
         } else {
             transcript = inlineParts.joined(separator: "\n\n")
+        }
+
+        // On-device URL recognition often returns empty without error — retry with en-US.
+        if transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           let fallback = SFSpeechRecognizer(locale: Locale(identifier: "en-US")),
+           fallback.isAvailable,
+           fallback.locale.identifier != recognizer.locale.identifier {
+            onProgress?(TranscriptionProgress(
+                fraction: 0.9,
+                message: "Retrying with English (US)…",
+                completedChunks: total,
+                totalChunks: total
+            ))
+            var retryParts: [String] = []
+            for chunkURL in chunks {
+                try Task.checkCancellation()
+                let text = try await transcribeChunk(url: chunkURL, recognizer: fallback)
+                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    retryParts.append(text)
+                }
+            }
+            transcript = retryParts.joined(separator: "\n\n")
         }
 
         onProgress?(TranscriptionProgress(fraction: 1, message: "Done", completedChunks: total, totalChunks: total))
@@ -112,27 +134,55 @@ actor TranscriptionEngine {
     private func transcribeChunk(url: URL, recognizer: SFSpeechRecognizer) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
             let request = SFSpeechURLRecognitionRequest(url: url)
+            request.shouldReportPartialResults = true
+            request.taskHint = .dictation
             LocalSpeechGuard.applyOnDeviceOnly(to: request)
 
             var resumed = false
+            var bestText = ""
+
+            func finish(_ text: String) {
+                guard !resumed else { return }
+                resumed = true
+                activeTask = nil
+                continuation.resume(returning: text.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+
             activeTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
                 if let error {
                     guard !resumed else { return }
-                    resumed = true
-                    continuation.resume(throwing: error)
-                    Task { await self?.clearTask() }
+                    if !bestText.isEmpty {
+                        finish(bestText)
+                    } else {
+                        resumed = true
+                        self?.activeTask = nil
+                        continuation.resume(throwing: error)
+                    }
                     return
                 }
-                guard let result, result.isFinal else { return }
-                guard !resumed else { return }
-                resumed = true
-                continuation.resume(returning: result.bestTranscription.formattedString)
-                Task { await self?.clearTask() }
+                guard let result else { return }
+                let text = result.bestTranscription.formattedString
+                if !text.isEmpty {
+                    bestText = text
+                }
+                if result.isFinal {
+                    finish(bestText)
+                }
+            }
+
+            // On-device file recognition may never mark isFinal — use last partial after a wait.
+            Task {
+                for _ in 0..<600 {
+                    try? await Task.sleep(for: .milliseconds(100))
+                    if resumed || isCancelled { return }
+                    if activeTask?.isFinishing == true || activeTask?.state == .completed {
+                        break
+                    }
+                }
+                if !resumed {
+                    finish(bestText)
+                }
             }
         }
-    }
-
-    private func clearTask() {
-        activeTask = nil
     }
 }
