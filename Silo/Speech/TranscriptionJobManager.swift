@@ -8,8 +8,14 @@ final class TranscriptionJobManager: ObservableObject {
     @Published private(set) var statusMessage = ""
     @Published private(set) var isRunning = false
     @Published var completedJobNeedsAttention: UUID?
+    /// Shown after the job ends until cleared or a new job starts.
+    @Published private(set) var failureMessage: String?
 
     weak var llamaState: LlamaState?
+
+    func clearFailure() {
+        failureMessage = nil
+    }
 
     private let engine = TranscriptionEngine()
     private var runTask: Task<Void, Never>?
@@ -34,6 +40,7 @@ final class TranscriptionJobManager: ObservableObject {
     /// Enqueues a durable transcription job (checkpointed, background-friendly).
     func startJob(mediaURL: URL, llamaState: LlamaState) async throws -> UUID {
         cancel()
+        clearFailure()
         self.llamaState = llamaState
 
         let jobId = UUID()
@@ -131,18 +138,24 @@ final class TranscriptionJobManager: ObservableObject {
 
             await llamaState?.attachVideoTranscript(transcript, transcriptJobId: jobId)
             await llamaState?.resumeModelAfterSpeech()
+
+            if llamaState?.transcriptCharacterCount == 0 {
+                failureMessage = "Transcription finished but no transcript was saved. Try a video with clearer speech."
+            }
         } catch is CancellationError {
             statusMessage = "Cancelled"
             activeJobId = nil
             await llamaState?.resumeModelAfterSpeech()
         } catch {
+            let message = Self.describeFailure(error)
             if var checkpoint = TranscriptionCheckpointStore.load(jobId: jobId) {
                 checkpoint.state = .failed
-                checkpoint.errorMessage = error.localizedDescription
+                checkpoint.errorMessage = message
                 checkpoint.updatedAt = Date()
                 try? TranscriptionCheckpointStore.save(checkpoint)
             }
-            statusMessage = error.localizedDescription
+            statusMessage = message
+            failureMessage = message
             activeJobId = nil
             await llamaState?.resumeModelAfterSpeech()
         }
@@ -159,5 +172,15 @@ final class TranscriptionJobManager: ObservableObject {
         guard backgroundTaskID != .invalid else { return }
         UIApplication.shared.endBackgroundTask(backgroundTaskID)
         backgroundTaskID = .invalid
+    }
+
+    private static func describeFailure(_ error: Error) -> String {
+        if let localized = error as? LocalizedError,
+           let description = localized.errorDescription,
+           !description.isEmpty {
+            return description
+        }
+        let text = error.localizedDescription
+        return text.isEmpty ? String(describing: error) : text
     }
 }

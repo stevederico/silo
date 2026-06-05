@@ -812,7 +812,6 @@ class LlamaState: ObservableObject {
 
         isLoadingModel = false
         modelLoadError = nil
-        messages = []
         print("Loaded model")
     }
 

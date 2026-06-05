@@ -107,6 +107,11 @@ struct ContentView: View {
                             modelSuspended: llamaState.modelSuspendedForSpeech,
                             onCancel: { jobManager.cancel() }
                         )
+                    } else if let transcriptionError = jobManager.failureMessage {
+                        TranscriptionErrorBanner(
+                            message: transcriptionError,
+                            onDismiss: { jobManager.clearFailure() }
+                        )
                     } else if llamaState.transcriptCharacterCount > 0 {
                         TranscriptAttachmentBanner(
                             characterCount: llamaState.transcriptCharacterCount,
@@ -293,6 +298,9 @@ struct ContentView: View {
         .onChange(of: videoPickerItem) { _, newItem in
             guard let newItem else { return }
             Task { await handlePickedVideo(newItem) }
+        }
+        .onChange(of: jobManager.failureMessage) { _, message in
+            videoImportError = message
         }
     }
 

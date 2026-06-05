@@ -30,6 +30,34 @@ struct TranscriptionProgressBanner: View {
     }
 }
 
+struct TranscriptionErrorBanner: View {
+    let message: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                Text("Transcription failed")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Button("Dismiss", action: onDismiss)
+                    .font(.caption)
+            }
+            Text(message)
+                .font(.caption)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .background(Color.red.opacity(0.12))
+        .cornerRadius(12)
+        .padding(.horizontal, 12)
+        .padding(.top, 4)
+    }
+}
+
 struct TranscriptAttachmentBanner: View {
     let characterCount: Int
     let onViewTranscript: () -> Void
