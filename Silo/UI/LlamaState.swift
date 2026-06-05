@@ -577,7 +577,9 @@ class LlamaState: ObservableObject {
         if downloadedModels.isEmpty {
             downloadDefaultModel()
         } else {
+            #if targetEnvironment(simulator)
             Task { await bootstrapSimulatorModelIfNeeded() }
+            #endif
         }
     }
 
