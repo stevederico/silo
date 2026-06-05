@@ -410,8 +410,21 @@ class LlamaState: ObservableObject {
         return files.filter { $0.pathExtension.lowercased() == "gguf" }
     }
 
+    private func fileSize(at url: URL) -> Int64 {
+        (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+    }
+
     private func resolveModelFileURL() -> URL? {
         let ggufs = ggufFilesInDocuments()
+        guard !ggufs.isEmpty else { return nil }
+
+        #if targetEnvironment(simulator)
+        // Simulator: prefer the smallest GGUF to avoid OOM load failures.
+        if let smallest = ggufs.min(by: { fileSize(at: $0) < fileSize(at: $1) }) {
+            return smallest
+        }
+        #endif
+
         if !currentModelName.isEmpty,
            let match = ggufs.first(where: { $0.deletingPathExtension().lastPathComponent == currentModelName }) {
             return match
@@ -462,7 +475,7 @@ class LlamaState: ObservableObject {
             try await initializeEngine(at: modelURL)
             return true
         } catch {
-            modelLoadError = error.localizedDescription
+            modelLoadError = Self.describeLoadError(error)
             return false
         }
     }
@@ -693,13 +706,21 @@ class LlamaState: ObservableObject {
             try await initializeEngine(at: modelUrl)
         } catch {
             isLoadingModel = false
-            modelLoadError = error.localizedDescription
+            modelLoadError = Self.describeLoadError(error)
             throw error
         }
 
         isLoadingModel = false
+        modelLoadError = nil
         messages = []
         print("Loaded model")
+    }
+
+    private static func describeLoadError(_ error: Error) -> String {
+        if let localized = error as? LocalizedError, let description = localized.errorDescription {
+            return description
+        }
+        return error.localizedDescription
     }
 
     private static func transcriptSystemMessage(_ transcript: String) -> String {
@@ -774,7 +795,7 @@ class LlamaState: ObservableObject {
         do {
             try await initializeEngine(at: modelURL)
         } catch {
-            modelLoadError = error.localizedDescription
+            modelLoadError = Self.describeLoadError(error)
         }
         isLoadingModel = false
     }

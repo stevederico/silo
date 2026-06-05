@@ -1,9 +1,23 @@
 import Foundation
 import llama
 
-enum LlamaError: Error {
-    case couldNotInitializeContext
+enum LlamaError: Error, LocalizedError {
+    case couldNotInitializeContext(path: String)
     case decodeFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .couldNotInitializeContext(let path):
+            let name = (path as NSString).lastPathComponent
+            #if targetEnvironment(simulator)
+            return "Could not load \(name). Large models (e.g. Gemma 4) often fail in the Simulator — use a physical iPhone, or download Ministral/LFM2.5 in Manage Models."
+            #else
+            return "Could not load \(name). The file may be corrupt or too large for available memory. Try another model in Manage Models."
+            #endif
+        case .decodeFailed:
+            return "Model inference failed while decoding."
+        }
+    }
 }
 
 private class ProgressCallbackContext {
@@ -127,14 +141,19 @@ actor LlamaContext {
         guard let model else {
             print("Could not load model at \(path)")
             releaseBackend()
-            throw LlamaError.couldNotInitializeContext
+            throw LlamaError.couldNotInitializeContext(path: path)
         }
 
         let n_threads = max(1, min(8, ProcessInfo.processInfo.processorCount - 2))
         // print("Using \(n_threads) threads")
 
         var ctx_params = llama_context_default_params()
-        ctx_params.n_ctx = contextSize
+        #if targetEnvironment(simulator)
+        let effectiveContext = min(contextSize, 2048)
+        #else
+        let effectiveContext = contextSize
+        #endif
+        ctx_params.n_ctx = effectiveContext
         ctx_params.n_threads       = Int32(n_threads)
         ctx_params.n_threads_batch = Int32(n_threads)
         // Note: KV cache quantization (type_k/type_v = Q8_0) requires flash_attn,
@@ -146,7 +165,7 @@ actor LlamaContext {
             print("Could not load context!")
             llama_model_free(model)
             releaseBackend()
-            throw LlamaError.couldNotInitializeContext
+            throw LlamaError.couldNotInitializeContext(path: path)
         }
 
         return LlamaContext(model: model, context: context)

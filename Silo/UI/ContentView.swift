@@ -88,6 +88,15 @@ struct ContentView: View {
                         }
                     )
 
+                    if let modelError = llamaState.modelLoadError, !llamaState.isModelLoaded, !llamaState.isLoadingModel {
+                        Text(modelError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 4)
+                    }
+
                     if jobManager.isRunning {
                         TranscriptionProgressBanner(
                             progress: jobManager.progress,
