@@ -35,9 +35,11 @@ enum LocalSpeechGuard {
         guard recognizer.isAvailable else {
             throw LocalSpeechError.recognizerUnavailable
         }
+        #if !targetEnvironment(simulator)
         guard recognizer.supportsOnDeviceRecognition else {
             throw LocalSpeechError.onDeviceUnavailable
         }
+        #endif
 
         return recognizer
     }
@@ -54,7 +56,15 @@ enum LocalSpeechGuard {
 
     /// Configures a request for strictly on-device recognition (no cloud).
     static func applyOnDeviceOnly(to request: SFSpeechRecognitionRequest) {
+        #if targetEnvironment(simulator)
+        // Simulator often lacks on-device speech assets; allow recognition for dev testing.
+        if let recognizer = SFSpeechRecognizer(),
+           recognizer.supportsOnDeviceRecognition {
+            request.requiresOnDeviceRecognition = true
+        }
+        #else
         request.requiresOnDeviceRecognition = true
+        #endif
         request.addsPunctuation = true
     }
 }
