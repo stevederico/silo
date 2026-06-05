@@ -300,6 +300,54 @@ class LlamaState: ObservableObject {
     let speechSynthesizer = SpeechSynthesizerService()
     private var suspendedModelURL: URL?
 
+    // Whisper models (reused download system)
+    let whisperModels: [Model] = [
+        Model(name: "Whisper Small EN (q5_1)", url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en-q5_1.bin", filename: "ggml-small.en-q5_1.bin"),
+        Model(name: "Whisper Base EN", url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin", filename: "ggml-base.en.bin"),
+    ]
+    @Published var downloadedWhisperModels: [Model] = []
+
+    func defaultWhisperModelPath() -> String? {
+        let preferred = "ggml-small.en-q5_1.bin"
+        let docsURL = getDocumentsDirectory().appendingPathComponent(preferred)
+        
+        // If already in documents, use it
+        if FileManager.default.fileExists(atPath: docsURL.path) {
+            return docsURL.path
+        }
+        
+        // Check if bundled in app (from Silo/models/whisper/)
+        if let bundleURL = Bundle.main.url(forResource: "ggml-small.en-q5_1", withExtension: "bin", subdirectory: "models/whisper") {
+            // Copy to documents for runtime use
+            do {
+                try FileManager.default.copyItem(at: bundleURL, to: docsURL)
+                print("Copied bundled whisper model to documents")
+                return docsURL.path
+            } catch {
+                print("Failed to copy bundled model: \(error)")
+                return bundleURL.path  // fallback to bundle path directly
+            }
+        }
+        
+        // fallback to first downloaded whisper in docs
+        if let first = downloadedWhisperModels.first {
+            let url = getDocumentsDirectory().appendingPathComponent(first.filename)
+            if FileManager.default.fileExists(atPath: url.path) {
+                return url.path
+            }
+        }
+        return nil
+    }
+
+    func downloadWhisperModel(_ model: Model) {
+        startDownload(modelName: model.name, modelUrl: model.url, filename: model.filename)
+        // After download, refresh list (simplified; in real would observe)
+        Task {
+            try? await Task.sleep(for: .seconds(1))
+            await MainActor.run { self.loadWhisperModelsFromDisk() }
+        }
+    }
+
     // Active download tracking — persists across modal dismiss/re-present
     @Published var activeDownloads: [String: Double] = [:]  // filename -> progress
     var downloadTasks: [String: URLSessionDownloadTask] = [:]
@@ -574,6 +622,7 @@ class LlamaState: ObservableObject {
         #endif
         loadModelsFromDisk()
         loadDownloadableModels()
+        loadWhisperModelsFromDisk()
         if downloadedModels.isEmpty {
             downloadDefaultModel()
         } else {
@@ -629,6 +678,28 @@ class LlamaState: ObservableObject {
             }
         } catch {
             print("Error loading models from disk: \(error)")
+        }
+    }
+
+    private func loadWhisperModelsFromDisk() {
+        do {
+            let documentsURL = getDocumentsDirectory()
+            let allURLs = try FileManager.default.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants])
+            let whisperURLs = allURLs.filter { $0.lastPathComponent.hasPrefix("ggml-") && $0.pathExtension.lowercased() == "bin" }
+            for url in whisperURLs {
+                let filename = url.lastPathComponent
+                if !downloadedWhisperModels.contains(where: { $0.filename == filename }) {
+                    if let catalog = whisperModels.first(where: { $0.filename == filename }) {
+                        var entry = catalog
+                        entry.status = "downloaded"
+                        downloadedWhisperModels.append(entry)
+                    } else {
+                        downloadedWhisperModels.append(Model(name: filename, url: "", filename: filename, status: "downloaded"))
+                    }
+                }
+            }
+        } catch {
+            print("Error loading whisper models from disk: \(error)")
         }
     }
 
@@ -735,11 +806,11 @@ class LlamaState: ObservableObject {
     }
 
     static let defaultModel = Model(
-        name: "Gemma 4 E2B Instruct Q4 (2.9 GiB)",
-        url: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf?download=true",
-        filename: "gemma-4-E2B-it-Q4_K_M.gguf",
+        name: "Gemma 4 E2B Instruct Q4 QAT (2.6 GiB)",
+        url: "https://huggingface.co/unsloth/gemma-4-E2B-it-qat-GGUF/resolve/main/gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf?download=true",
+        filename: "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf",
         status: "download",
-        released: catalogDate(2026, 4, 2))
+        released: catalogDate(2026, 6, 5))
 
     static let lfmSimulatorModel = Model(
         name: "LFM2.5-1.2B Instruct Q8 (1.2 GiB)",
@@ -770,6 +841,12 @@ class LlamaState: ObservableObject {
               filename: "Ministral-3-3B-Instruct-2512-Q4_K_M.gguf",
               status: "download",
               released: catalogDate(2025, 12, 2)),
+
+        Model(name: "Gemma 4 E2B Instruct Q4 (2.9 GiB)",
+              url: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf?download=true",
+              filename: "gemma-4-E2B-it-Q4_K_M.gguf",
+              status: "download",
+              released: catalogDate(2026, 4, 2)),
 
         Model(name: "Gemma 4 E2B Instruct Q8 (4.6 GiB)",
               url: "https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q8_0.gguf?download=true",
@@ -1235,6 +1312,7 @@ class LlamaState: ObservableObject {
     let modelRequirements: [String: Double] = [
         "LFM2.5-1.2B Instruct Q8 (1.2 GiB)": 1.3,
         "Ministral-3B Instruct Q4 (2.0 GiB)": 2.2,
+        "Gemma 4 E2B Instruct Q4 QAT (2.6 GiB)": 2.7,
         "Gemma 4 E2B Instruct Q4 (2.9 GiB)": 3.0,
         "Gemma 4 E2B Instruct Q8 (4.6 GiB)": 5.0
     ]

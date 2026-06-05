@@ -33,6 +33,7 @@ struct HeaderView: View {
 
     /// Parse a GGUF filename into a clean display name.
     /// "gemma-4-E2B-it-Q4_K_M" -> "Gemma 4"
+    /// "gemma-4-E2B-it-qat-UD-Q4_K_XL" -> "Gemma 4"
     /// "SmolLM3-3B-Q4_K_M" -> "SmolLM3"
     /// "LFM2.5-1.2B-Instruct-Q8_0" -> "LFM2.5"
     /// "Ministral-3B-Instruct-Q4_K_M" -> "Ministral"
@@ -62,15 +63,26 @@ struct HeaderView: View {
             name = String(name[..<range.lowerBound])
         }
 
+        // Strip QAT / Unsloth Dynamic markers (QAT models, UD quants) for clean display
+        let extraClean = ["-qat", "-QAT", "-UD", "-XL", "qat", "QAT", "UD", "XL"]
+        for token in extraClean {
+            name = name.replacingOccurrences(of: token, with: "")
+        }
+
         // Replace hyphens with spaces
         name = name.replacingOccurrences(of: "-", with: " ")
+
+        // Collapse multiple spaces
+        while name.contains("  ") {
+            name = name.replacingOccurrences(of: "  ", with: " ")
+        }
 
         // Capitalize first letter
         if let first = name.first {
             name = first.uppercased() + name.dropFirst()
         }
 
-        return name
+        return name.trimmingCharacters(in: .whitespaces)
     }
 
     var body: some View {

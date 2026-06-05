@@ -43,7 +43,7 @@ Build and run on an iPhone or simulator running iOS 18.2+.
 - **Works offline** — airplane mode, subway, off-grid
 
 ### 🧠 **Models**
-- **Gemma 4 E2B** from Google (Q4 default, Q8 optional)
+- **Gemma 4 E2B** from Google (Q4 QAT default — quantization-aware training for higher quality at lower memory, Q8 optional)
 - **Ministral 3B** from Mistral — balanced instruct model
 - **LFM 2.5** from Liquid AI — fast 1.2B instruct model
 - **Bring your own GGUF** from any Hugging Face URL
