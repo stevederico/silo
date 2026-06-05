@@ -402,6 +402,71 @@ class LlamaState: ObservableObject {
     private var inferenceEngine: InferenceEngine?
     var conversationManager: ConversationManager?
 
+    var isModelLoaded: Bool { inferenceEngine != nil }
+
+    private func ggufFilesInDocuments() -> [URL] {
+        let documents = getDocumentsDirectory()
+        let files = (try? FileManager.default.contentsOfDirectory(at: documents, includingPropertiesForKeys: nil)) ?? []
+        return files.filter { $0.pathExtension.lowercased() == "gguf" }
+    }
+
+    private func resolveModelFileURL() -> URL? {
+        let ggufs = ggufFilesInDocuments()
+        if !currentModelName.isEmpty,
+           let match = ggufs.first(where: { $0.deletingPathExtension().lastPathComponent == currentModelName }) {
+            return match
+        }
+        return ggufs.first
+    }
+
+    private func initializeEngine(at modelURL: URL) async throws {
+        let engine = LlamaCppEngine()
+        inferenceEngine = engine
+        do {
+            try await engine.initialize(modelPath: modelURL.path(), contextSize: contextSize) { [weak self] progress in
+                Task { @MainActor in
+                    self?.modelLoadProgress = Double(progress)
+                }
+            }
+        } catch {
+            inferenceEngine = nil
+            throw error
+        }
+        currentModelName = modelURL.deletingPathExtension().lastPathComponent
+        registerDownloadedModel(
+            filename: modelURL.lastPathComponent,
+            fallbackName: currentModelName
+        )
+    }
+
+    /// Loads the on-disk GGUF if the engine was unloaded (e.g. after video transcription).
+    func ensureModelLoaded() async -> Bool {
+        if inferenceEngine != nil { return true }
+
+        if modelSuspendedForSpeech {
+            await resumeModelAfterSpeech()
+            if inferenceEngine != nil { return true }
+        }
+
+        guard let modelURL = resolveModelFileURL() else {
+            modelLoadError = "No model file found on device."
+            return false
+        }
+
+        isLoadingModel = true
+        modelLoadProgress = 0
+        modelLoadError = nil
+        defer { isLoadingModel = false }
+
+        do {
+            try await initializeEngine(at: modelURL)
+            return true
+        } catch {
+            modelLoadError = error.localizedDescription
+            return false
+        }
+    }
+
     // Streaming state promoted to instance vars for stop() access
     private var isStopped = false
     private var rawResponse = ""
@@ -624,28 +689,16 @@ class LlamaState: ObservableObject {
         await inferenceEngine?.deinitialize()
         inferenceEngine = nil
 
-        let engine = LlamaCppEngine()
-        inferenceEngine = engine
         do {
-            try await engine.initialize(modelPath: modelUrl.path(), contextSize: contextSize) { [weak self] progress in
-                Task { @MainActor in
-                    self?.modelLoadProgress = Double(progress)
-                }
-            }
+            try await initializeEngine(at: modelUrl)
         } catch {
             isLoadingModel = false
             modelLoadError = error.localizedDescription
-            inferenceEngine = nil
             throw error
         }
 
         isLoadingModel = false
         messages = []
-        registerDownloadedModel(
-            filename: modelUrl.lastPathComponent,
-            fallbackName: modelUrl.deletingPathExtension().lastPathComponent
-        )
-        currentModelName = modelUrl.deletingPathExtension().lastPathComponent
         print("Loaded model")
     }
 
@@ -696,14 +749,7 @@ class LlamaState: ObservableObject {
         guard inferenceEngine != nil else { return }
         if isGenerating { await stop() }
 
-        if !currentModelName.isEmpty {
-            let documents = getDocumentsDirectory()
-            let files = (try? FileManager.default.contentsOfDirectory(at: documents, includingPropertiesForKeys: nil)) ?? []
-            suspendedModelURL = files.first {
-                $0.pathExtension.lowercased() == "gguf"
-                    && $0.deletingPathExtension().lastPathComponent == currentModelName
-            }
-        }
+        suspendedModelURL = resolveModelFileURL()
 
         await inferenceEngine?.deinitialize()
         inferenceEngine = nil
@@ -716,25 +762,19 @@ class LlamaState: ObservableObject {
             modelSuspendedForSpeech = false
             suspendedModelURL = nil
         }
-        guard let modelURL = suspendedModelURL else { return }
+        guard let modelURL = suspendedModelURL ?? resolveModelFileURL() else {
+            modelLoadError = "Could not find model file to reload."
+            return
+        }
 
         isLoadingModel = true
         modelLoadProgress = 0
         modelLoadError = nil
 
-        let engine = LlamaCppEngine()
-        inferenceEngine = engine
         do {
-            try await engine.initialize(modelPath: modelURL.path(), contextSize: contextSize) { [weak self] progress in
-                Task { @MainActor in
-                    self?.modelLoadProgress = Double(progress)
-                }
-            }
+            try await initializeEngine(at: modelURL)
         } catch {
-            isLoadingModel = false
             modelLoadError = error.localizedDescription
-            inferenceEngine = nil
-            return
         }
         isLoadingModel = false
     }
@@ -807,16 +847,22 @@ class LlamaState: ObservableObject {
             saveCurrentConversation()
             return
         }
-        guard let inferenceEngine else {
-            let notice = ChatMessage(
-                content: "No model is loaded. Open Manage Models to download or select a model, then try again.",
-                isUser: false,
-                timestamp: Date()
-            )
-            messages.append(notice)
-            saveCurrentConversation()
-            return
+        if inferenceEngine == nil {
+            let loaded = await ensureModelLoaded()
+            guard loaded, inferenceEngine != nil else {
+                let detail = modelLoadError ?? "Unknown error"
+                let notice = ChatMessage(
+                    content: "Could not load the model (\(detail)). Open Manage Models to download one.",
+                    isUser: false,
+                    timestamp: Date()
+                )
+                messages.append(notice)
+                saveCurrentConversation()
+                return
+            }
         }
+
+        guard let inferenceEngine else { return }
 
         speechSynthesizer.stop()
         isGenerating = true

@@ -246,6 +246,11 @@ struct ContentView: View {
             llamaState.conversationManager = conversationManager
             jobManager.llamaState = llamaState
             isFocused = true
+            Task {
+                if !llamaState.isModelLoaded, !llamaState.downloadedModels.isEmpty {
+                    _ = await llamaState.ensureModelLoaded()
+                }
+            }
         }
         .onChange(of: voiceSession.partialTranscript) { _, newValue in
             guard voiceSession.isListening else { return }
@@ -291,6 +296,14 @@ struct ContentView: View {
         if llamaState.downloadedModels.isEmpty {
             showManageModels = true
             return
+        }
+
+        if !llamaState.isModelLoaded {
+            let loaded = await llamaState.ensureModelLoaded()
+            if !loaded {
+                voiceErrorMessage = llamaState.modelLoadError ?? "Could not load model."
+                return
+            }
         }
 
         let messageToSend = text
