@@ -13,21 +13,27 @@ struct InputComposer: View {
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            Button(action: onVideoImport) {
-                Image(systemName: "film")
-                    .font(.system(size: 18))
-                    .foregroundStyle(.primary)
-                    .frame(width: 32, height: 32)
-            }
-            .disabled(isGenerating || isListening || inputsDisabled)
+            Menu {
+                Button(action: onVideoImport) {
+                    Label("Video transcript", systemImage: "film")
+                }
+                .disabled(isGenerating || isListening || inputsDisabled)
 
-            Button(action: onVoiceToggle) {
-                Image(systemName: isListening ? "mic.fill" : "mic")
-                    .font(.system(size: 18))
+                Button(action: onVoiceToggle) {
+                    if isListening {
+                        Label("Stop & send", systemImage: "mic.fill")
+                    } else {
+                        Label("Voice input", systemImage: "mic")
+                    }
+                }
+                .disabled(isGenerating || inputsDisabled)
+            } label: {
+                Image(systemName: isListening ? "mic.fill" : "plus")
+                    .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(isListening ? .red : .primary)
                     .frame(width: 32, height: 32)
             }
-            .disabled(isGenerating || inputsDisabled)
+            .disabled(inputsDisabled && !isListening)
 
             TextField(
                 inputsDisabled ? "Waiting for model…" : (isListening ? "Listening…" : "Ask anything"),
