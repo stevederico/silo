@@ -1,0 +1,7 @@
+// Copy to Signing.local.xcconfig (gitignored) for local device signing.
+// Do not commit Signing.local.xcconfig or your Development Team ID.
+//
+// DEVELOPMENT_TEAM = YOUR_TEAM_ID
+//
+// Keep the open-source bundle identifier:
+// PRODUCT_BUNDLE_IDENTIFIER = com.example.silo

@@ -106,7 +106,9 @@ cd silo
 open Silo.xcodeproj
 ```
 
-Open an issue before large changes. Keep PRs scoped. Set your own `DEVELOPMENT_TEAM` and `PRODUCT_BUNDLE_IDENTIFIER` before building on a device.
+Open an issue before large changes. Keep PRs scoped.
+
+**Local device builds:** Set your Apple Development Team in Xcode (Signing & Capabilities). Do **not** commit team IDs, provisioning profiles, or bundle ID changes—the repo uses `com.example.silo` and empty `DEVELOPMENT_TEAM` in the project file. Optional: copy `Config/Signing.local.xcconfig.example` to `Config/Signing.local.xcconfig` (gitignored) and set `DEVELOPMENT_TEAM` there.
 
 <br />
 
