@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct ContentView: View {
     @StateObject var llamaState = LlamaState()
@@ -7,8 +8,10 @@ struct ContentView: View {
     @State private var drawerOffset: CGFloat = 0
     @State private var showSettings = false
     @State private var showManageModels = false
-    @State private var showVideoImport = false
+    @State private var showVideoPicker = false
+    @State private var videoPickerItem: PhotosPickerItem?
     @State private var showTranscript = false
+    @State private var videoImportError: String?
     @StateObject private var jobManager = TranscriptionJobManager()
     @StateObject private var voiceSession = VoiceSession()
     @FocusState private var isFocused: Bool
@@ -185,7 +188,7 @@ struct ContentView: View {
                         inputsDisabled: llamaState.modelSuspendedForSpeech || llamaState.speechSynthesizer.isSpeaking,
                         onSend: { Task { await submitMessage() } },
                         onStop: stopGeneration,
-                        onVideoImport: { showVideoImport = true },
+                        onVideoImport: { showVideoPicker = true },
                         onVoiceToggle: { Task { await handleVoiceToggle() } },
                         onHoldVoiceStart: { Task { await startVoiceInput() } },
                         onHoldVoiceEnd: { Task { await submitMessage() } },
@@ -193,6 +196,13 @@ struct ContentView: View {
                     )
                     if let voiceErrorMessage {
                         Text(voiceErrorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 4)
+                    }
+                    if let videoImportError {
+                        Text(videoImportError)
                             .font(.caption)
                             .foregroundStyle(.red)
                             .padding(.horizontal, 20)
@@ -243,9 +253,11 @@ struct ContentView: View {
             .sheet(isPresented: $showManageModels) {
                 ManageModelsView(llamaState: llamaState)
             }
-            .sheet(isPresented: $showVideoImport) {
-                VideoImportView(jobManager: jobManager, llamaState: llamaState)
-            }
+            .photosPicker(
+                isPresented: $showVideoPicker,
+                selection: $videoPickerItem,
+                matching: .videos
+            )
             .sheet(isPresented: $showTranscript) {
                 if let text = llamaState.resolvedTranscriptText() {
                     TranscriptView(transcript: text, title: "Transcript")
@@ -277,6 +289,25 @@ struct ContentView: View {
         }
         .onChange(of: voiceSession.errorMessage) { _, message in
             voiceErrorMessage = message
+        }
+        .onChange(of: videoPickerItem) { _, newItem in
+            guard let newItem else { return }
+            Task { await handlePickedVideo(newItem) }
+        }
+    }
+
+    @MainActor
+    private func handlePickedVideo(_ item: PhotosPickerItem) async {
+        videoPickerItem = nil
+        videoImportError = nil
+        do {
+            guard let movie = try await item.loadTransferable(type: ImportedVideoFile.self) else {
+                videoImportError = "Could not load video from Photos."
+                return
+            }
+            _ = try await jobManager.startJob(mediaURL: movie.url, llamaState: llamaState)
+        } catch {
+            videoImportError = error.localizedDescription
         }
     }
 
