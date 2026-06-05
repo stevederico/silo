@@ -178,6 +178,8 @@ struct ContentView: View {
                         onStop: stopGeneration,
                         onVideoImport: { showVideoImport = true },
                         onVoiceToggle: { Task { await handleVoiceToggle() } },
+                        onHoldVoiceStart: { Task { await startVoiceInput() } },
+                        onHoldVoiceEnd: { Task { await submitMessage() } },
                         focusState: $isFocused
                     )
                     if let voiceErrorMessage {
@@ -317,6 +319,22 @@ struct ContentView: View {
         }
     }
 
+    private func startVoiceInput() async {
+        guard !voiceSession.isListening else { return }
+        if llamaState.speechSynthesizer.isSpeaking {
+            llamaState.speechSynthesizer.stop()
+        }
+        guard !llamaState.modelSuspendedForSpeech else { return }
+
+        isFocused = false
+        voiceErrorMessage = nil
+        do {
+            try await voiceSession.startListening()
+        } catch {
+            voiceErrorMessage = error.localizedDescription
+        }
+    }
+
     private func handleVoiceToggle() async {
         if llamaState.speechSynthesizer.isSpeaking {
             llamaState.speechSynthesizer.stop()
@@ -332,13 +350,7 @@ struct ContentView: View {
             await submitMessage()
             return
         }
-        isFocused = false
-        voiceErrorMessage = nil
-        do {
-            try await voiceSession.startListening()
-        } catch {
-            voiceErrorMessage = error.localizedDescription
-        }
+        await startVoiceInput()
     }
 }
 
