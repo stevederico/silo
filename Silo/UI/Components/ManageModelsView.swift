@@ -63,6 +63,41 @@ struct ManageModelsView: View {
                 } header: {
                     Text("Recommended Models")
                 }
+
+                // MARK: - Whisper Speech Models (for video/voice transcription)
+                if !llamaState.downloadedWhisperModels.isEmpty {
+                    Section {
+                        ForEach(llamaState.downloadedWhisperModels, id: \.id) { model in
+                            HStack {
+                                Text(model.name)
+                                Spacer()
+                                Text("Downloaded")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } header: {
+                        Text("Downloaded Speech Models")
+                    }
+                }
+
+                Section {
+                    ForEach(llamaState.whisperModels.filter { model in
+                        !llamaState.downloadedWhisperModels.contains(where: { $0.filename == model.filename })
+                    }, id: \.id) { model in
+                        Button {
+                            llamaState.downloadWhisperModel(model)
+                        } label: {
+                            HStack {
+                                Text(model.name)
+                                Spacer()
+                                Image(systemName: "arrow.down.circle")
+                            }
+                        }
+                    }
+                } header: {
+                    Text("Speech Models (Whisper)")
+                }
             }
             .navigationTitle("Manage Models")
             .navigationBarTitleDisplayMode(.inline)

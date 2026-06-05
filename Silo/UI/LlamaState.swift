@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 struct Model: Identifiable {
     var id = UUID()
@@ -22,6 +23,12 @@ struct ChatMessage: Identifiable, Codable {
         self.content = content
         self.isUser = isUser
         self.timestamp = timestamp
+    }
+
+    static let videoTranscriptAttachmentPrefix = "Interview transcript attached"
+
+    var isVideoTranscriptAttachment: Bool {
+        isUser && content.hasPrefix(Self.videoTranscriptAttachmentPrefix)
     }
 
     var displayContent: String {
@@ -291,6 +298,9 @@ class LlamaState: ObservableObject {
     @Published var undownloadedModels: [Model] = []
     @Published var currentConversation: Conversation?
     @Published var conversationTranscript: String?
+    @Published private(set) var transcriptCharacterCount = 0
+    @Published var attachedVideoThumbnail: UIImage?
+    @Published var attachedTranscriptionJobId: UUID?
     @Published var modelSuspendedForSpeech = false
     @Published var modelLoadError: String?
     @Published var speakRepliesEnabled: Bool {
@@ -919,19 +929,49 @@ class LlamaState: ObservableObject {
         if let inline = currentConversation?.transcript, !inline.isEmpty {
             return inline
         }
-        if let filename = currentConversation?.transcriptFilename {
-            let url = getDocumentsDirectory().appendingPathComponent(filename)
-            return try? String(contentsOf: url, encoding: .utf8)
-        }
         return nil
     }
 
-    var transcriptCharacterCount: Int {
-        resolvedTranscriptText()?.count ?? 0
+    /// Loads transcript text off the main thread when it is only stored on disk.
+    func loadResolvedTranscriptText() async -> String? {
+        if let cached = resolvedTranscriptText() {
+            return cached
+        }
+        guard let filename = currentConversation?.transcriptFilename else { return nil }
+        let url = getDocumentsDirectory().appendingPathComponent(filename)
+        let text = await Task.detached(priority: .userInitiated) {
+            try? String(contentsOf: url, encoding: .utf8)
+        }.value
+        if let text, !text.isEmpty {
+            conversationTranscript = text
+            transcriptCharacterCount = text.count
+        }
+        return text
     }
 
-    private func appendTranscriptContext(to chatMessages: inout [(role: String, content: String)]) {
-        guard let transcript = resolvedTranscriptText(), !transcript.isEmpty else { return }
+    private func setTranscriptContext(text: String?, jobId: UUID?) {
+        conversationTranscript = text
+        transcriptCharacterCount = text?.count ?? 0
+        attachedTranscriptionJobId = jobId
+        refreshAttachedVideoThumbnail()
+    }
+
+    func refreshAttachedVideoThumbnail() {
+        if let jobId = attachedTranscriptionJobId,
+           let image = VideoThumbnailGenerator.loadJobThumbnail(jobId: jobId) {
+            attachedVideoThumbnail = image
+            return
+        }
+        if let conversationId = currentConversation?.id,
+           let image = VideoThumbnailGenerator.loadConversationThumbnail(conversationId: conversationId) {
+            attachedVideoThumbnail = image
+            return
+        }
+        attachedVideoThumbnail = nil
+    }
+
+    private func appendTranscriptContext(to chatMessages: inout [(role: String, content: String)]) async {
+        guard let transcript = await loadResolvedTranscriptText(), !transcript.isEmpty else { return }
         chatMessages.append((role: "system", content: Self.transcriptSystemMessage(transcript)))
     }
 
@@ -978,12 +1018,12 @@ class LlamaState: ObservableObject {
         isLoadingModel = false
     }
 
-    private func chatMessagesForInference() -> [(role: String, content: String)] {
+    private func chatMessagesForInference() async -> [(role: String, content: String)] {
         var chatMessages: [(role: String, content: String)] = []
         if !systemPrompt.isEmpty {
             chatMessages.append((role: "system", content: systemPrompt))
         }
-        appendTranscriptContext(to: &chatMessages)
+        await appendTranscriptContext(to: &chatMessages)
         for msg in messages {
             chatMessages.append((role: msg.isUser ? "user" : "assistant", content: msg.content))
         }
@@ -994,18 +1034,24 @@ class LlamaState: ObservableObject {
     func attachVideoTranscript(_ transcript: String, transcriptJobId: UUID? = nil) async {
         saveCurrentConversation()
         messages = []
-        conversationTranscript = transcript
+
+        var text = transcript
+        if let jobId = transcriptJobId {
+            let jobTranscript = await Task.detached(priority: .userInitiated) {
+                TranscriptionCheckpointStore.readTranscript(jobId: jobId)
+            }.value
+            if let jobTranscript, !jobTranscript.isEmpty {
+                text = jobTranscript
+            }
+        }
 
         var conversation = conversationManager?.createNew() ?? Conversation()
         conversation.title = "Video chat"
 
-        if let jobId = transcriptJobId,
-           let jobTranscript = TranscriptionCheckpointStore.readTranscript(jobId: jobId),
-           !jobTranscript.isEmpty {
-            conversationTranscript = jobTranscript
+        if let jobId = transcriptJobId {
+            VideoThumbnailGenerator.copyJobThumbnailToConversation(jobId: jobId, conversationId: conversation.id)
         }
 
-        let text = conversationTranscript ?? transcript
         if let relative = try? saveTranscriptToDisk(conversationId: conversation.id, transcript: text) {
             conversation.transcriptFilename = relative
             conversation.transcript = nil
@@ -1013,8 +1059,9 @@ class LlamaState: ObservableObject {
             conversation.transcript = text
         }
         currentConversation = conversation
+        setTranscriptContext(text: text, jobId: transcriptJobId)
 
-        let preview = "Interview transcript attached (\(text.count) characters). Ask questions about the video."
+        let preview = "\(ChatMessage.videoTranscriptAttachmentPrefix) (\(text.count) characters). Ask questions about the video."
         messages = [ChatMessage(content: preview, isUser: true, timestamp: Date())]
         conversation.messages = messages
         conversationManager?.save(conversation)
@@ -1023,14 +1070,14 @@ class LlamaState: ObservableObject {
 
     /// Removes video transcript context (e.g. when the user dismisses the banner).
     func clearVideoTranscriptAttachment() {
-        conversationTranscript = nil
+        setTranscriptContext(text: nil, jobId: nil)
         guard var conversation = currentConversation else { return }
         conversation.transcript = nil
         conversation.transcriptFilename = nil
         if messages.count == 1,
            let only = messages.first,
            only.isUser,
-           only.content.contains("Interview transcript attached") {
+           only.isVideoTranscriptAttachment {
             messages = []
             conversation.messages = []
         }
@@ -1104,14 +1151,14 @@ class LlamaState: ObservableObject {
             if !systemPrompt.isEmpty {
                 chatMessages.append((role: "system", content: systemPrompt))
             }
-            appendTranscriptContext(to: &chatMessages)
+            await appendTranscriptContext(to: &chatMessages)
             for msg in messages {
                 chatMessages.append((role: msg.isUser ? "user" : "assistant", content: msg.content))
             }
 
             // Context overflow handling
             let budget = Int(Double(contextSize) * 0.95)
-            var currentTokenCount = (try? await inferenceEngine.countTokens(for: chatMessages)) ?? 0
+            var currentTokenCount = await inferenceEngine.countTokens(for: chatMessages)
             var trimmed = false
             while currentTokenCount > budget && chatMessages.count > 1 {
                 // Remove oldest non-system message
@@ -1119,7 +1166,7 @@ class LlamaState: ObservableObject {
                 if removeIndex >= chatMessages.count { break }
                 chatMessages.remove(at: removeIndex)
                 trimmed = true
-                currentTokenCount = (try? await inferenceEngine.countTokens(for: chatMessages)) ?? 0
+                currentTokenCount = await inferenceEngine.countTokens(for: chatMessages)
             }
             // If still over budget with system + last user, drop system
             if currentTokenCount > budget, chatMessages.count > 1, chatMessages.first?.role == "system" {
@@ -1268,7 +1315,7 @@ class LlamaState: ObservableObject {
         }
         messages = []
         currentResponse = ""
-        conversationTranscript = nil
+        setTranscriptContext(text: nil, jobId: nil)
         currentConversation = conversationManager?.createNew()
     }
 
@@ -1337,7 +1384,7 @@ class LlamaState: ObservableObject {
             (role: "user", content: "Generate a short title for this conversation.")
         ]
 
-        let conversationMessages = chatMessagesForInference()
+        let conversationMessages = await chatMessagesForInference()
 
         do {
             await inferenceEngine.clearGenerationState()
@@ -1440,14 +1487,25 @@ class LlamaState: ObservableObject {
         saveCurrentConversation()
         guard let conversation = conversationManager?.loadFullConversation(id: id) else { return }
         messages = conversation.messages
-        if let filename = conversation.transcriptFilename {
-            let url = getDocumentsDirectory().appendingPathComponent(filename)
-            conversationTranscript = try? String(contentsOf: url, encoding: .utf8)
-        } else {
-            conversationTranscript = conversation.transcript
-        }
         currentConversation = conversation
         conversationManager?.currentConversationId = conversation.id
+
+        if let inline = conversation.transcript, !inline.isEmpty {
+            setTranscriptContext(text: inline, jobId: nil)
+        } else if conversation.transcriptFilename != nil {
+            setTranscriptContext(text: nil, jobId: nil)
+            let conversationId = conversation.id
+            Task {
+                _ = await loadResolvedTranscriptText()
+                await MainActor.run {
+                    guard self.currentConversation?.id == conversationId else { return }
+                    self.refreshAttachedVideoThumbnail()
+                }
+            }
+        } else {
+            setTranscriptContext(text: nil, jobId: nil)
+        }
+        refreshAttachedVideoThumbnail()
     }
 
     func startNewConversation() async {

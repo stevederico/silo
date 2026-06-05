@@ -10,8 +10,12 @@ final class TranscriptionJobManager: ObservableObject {
     @Published var completedJobNeedsAttention: UUID?
     /// Shown after the job ends until cleared or a new job starts.
     @Published private(set) var failureMessage: String?
+    @Published private(set) var videoThumbnail: UIImage?
 
     weak var llamaState: LlamaState?
+
+    /// Set this before starting jobs (path to ggml-small.en-q5_0.bin or similar)
+    var whisperModelPath: String?
 
     func clearFailure() {
         failureMessage = nil
@@ -35,6 +39,7 @@ final class TranscriptionJobManager: ObservableObject {
         isRunning = false
         statusMessage = "Cancelled"
         activeJobId = nil
+        videoThumbnail = nil
     }
 
     /// Enqueues a durable transcription job (checkpointed, background-friendly).
@@ -42,6 +47,8 @@ final class TranscriptionJobManager: ObservableObject {
         cancel()
         clearFailure()
         self.llamaState = llamaState
+        llamaState.attachedTranscriptionJobId = nil
+        llamaState.attachedVideoThumbnail = nil
 
         let jobId = UUID()
         let jobDir = try TranscriptionCheckpointStore.ensureJobDirectory(jobId)
@@ -55,6 +62,19 @@ final class TranscriptionJobManager: ObservableObject {
             try FileManager.default.removeItem(at: destMedia)
         }
         try FileManager.default.copyItem(at: mediaURL, to: destMedia)
+
+        videoThumbnail = nil
+        let thumbnailJobId = jobId
+        let thumbnailMediaURL = destMedia
+        Task {
+            await VideoThumbnailGenerator.generateAndSaveForJob(jobId: thumbnailJobId, mediaURL: thumbnailMediaURL)
+            let image = VideoThumbnailGenerator.loadJobThumbnail(jobId: thumbnailJobId)
+            await MainActor.run {
+                guard self.activeJobId == thumbnailJobId || self.completedJobNeedsAttention == thumbnailJobId else { return }
+                self.videoThumbnail = image
+                self.llamaState?.attachedVideoThumbnail = image
+            }
+        }
 
         let checkpoint = TranscriptionCheckpoint(
             jobId: jobId,
@@ -75,6 +95,11 @@ final class TranscriptionJobManager: ObservableObject {
         isRunning = true
         progress = 0
         statusMessage = "Queued…"
+
+        // Auto wire whisper model if available
+        if let ls = self.llamaState {
+            self.whisperModelPath = ls.defaultWhisperModelPath()
+        }
 
         runTask = Task {
             await self.runJob(jobId: jobId, mediaURL: destMedia)
@@ -104,6 +129,12 @@ final class TranscriptionJobManager: ObservableObject {
         try? TranscriptionCheckpointStore.save(checkpoint)
 
         do {
+            if let path = whisperModelPath {
+                await engine.configure(whisperModelPath: path)
+            } else {
+                // TODO: set via jobManager.whisperModelPath = "/path/to/model.bin" before startJob
+            }
+
             let startChunk = checkpoint.completedChunkIndex
             let result = try await engine.transcribe(
                 mediaURL: mediaURL,
@@ -122,7 +153,7 @@ final class TranscriptionJobManager: ObservableObject {
                     domain: "TranscriptionJob",
                     code: 2,
                     userInfo: [NSLocalizedDescriptionKey: """
-                    No speech detected. Use a video with clear spoken audio, check Speech permission in Settings, and download your language under Settings → General → Keyboard → Dictation (on-device).
+                    No speech detected. Use a video with clear spoken audio and download a Whisper model in Manage Models.
                     """]
                 )
             }

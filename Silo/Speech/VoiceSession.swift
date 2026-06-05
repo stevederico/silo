@@ -1,6 +1,5 @@
 import AVFoundation
 import Foundation
-import Speech
 
 @MainActor
 final class VoiceSession: ObservableObject {
@@ -9,56 +8,63 @@ final class VoiceSession: ObservableObject {
     @Published var errorMessage: String?
 
     private let audioEngine = AVAudioEngine()
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var recognitionTask: SFSpeechRecognitionTask?
-    private var recognizer: SFSpeechRecognizer?
-    private var finalizedTranscript = ""
+    private var audioSamples: [Float] = []
     private var isStopping = false
+
+    // For whisper live (set before start)
+    var whisperModelPath: String?
+    private let whisperEngine = WhisperCppEngine()
 
     func startListening() async throws {
         errorMessage = nil
         partialTranscript = ""
-        finalizedTranscript = ""
-
-        recognizer = try await LocalSpeechGuard.ensureReady()
+        audioSamples = []
+        isStopping = false
 
         let audioSession = AVAudioSession.sharedInstance()
         try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
         try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
 
-        let request = SFSpeechAudioBufferRecognitionRequest()
-        LocalSpeechGuard.applyOnDeviceOnly(to: request)
-        request.shouldReportPartialResults = true
-        recognitionRequest = request
-
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
+
+        // Prefer 16kHz for whisper compatibility
+        let desiredFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16000, channels: 1, interleaved: false) ?? format
+
         inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
-            request.append(buffer)
-        }
-
-        guard let recognizer else { throw LocalSpeechError.recognizerUnavailable }
-
-        recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            Task { @MainActor in
-                guard let self else { return }
-                if let result {
-                    let text = result.bestTranscription.formattedString
-                    self.partialTranscript = text
-                    if result.isFinal {
-                        self.finalizedTranscript = text
-                    }
-                }
-                if let error, !self.isStopping {
-                    self.errorMessage = error.localizedDescription
-                }
-            }
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: desiredFormat) { [weak self] buffer, _ in
+            guard let self else { return }
+            // Convert to float samples
+            guard let channelData = buffer.floatChannelData?[0] else { return }
+            let frameLength = Int(buffer.frameLength)
+            let samples = Array(UnsafeBufferPointer(start: channelData, count: frameLength))
+            self.audioSamples.append(contentsOf: samples)
         }
 
         audioEngine.prepare()
         try audioEngine.start()
         isListening = true
+
+        // Simple partial: every 2s transcribe what we have so far (for demo)
+        Task {
+            while self.isListening && !self.isStopping {
+                try? await Task.sleep(for: .seconds(2))
+                if self.isListening && !self.audioSamples.isEmpty, let path = self.whisperModelPath {
+                    do {
+                        try await self.whisperEngine.initialize(modelPath: path)
+                        let segments = try await self.whisperEngine.transcribe(audioSamples: self.audioSamples)
+                        let text = segments.map(\.text).joined(separator: " ")
+                        await MainActor.run {
+                            if !text.isEmpty {
+                                self.partialTranscript = text
+                            }
+                        }
+                    } catch {
+                        // ignore partial errors
+                    }
+                }
+            }
+        }
     }
 
     func stopListening() async -> String {
@@ -70,29 +76,28 @@ final class VoiceSession: ObservableObject {
 
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
-        recognitionRequest?.endAudio()
-        recognitionTask?.finish()
 
-        // Wait for a final result; fall back to the last partial we already showed in the UI.
-        for _ in 0..<30 {
-            let candidate = finalizedTranscript.isEmpty ? partialTranscript : finalizedTranscript
-            if !candidate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                break
+        // Final transcription with whisper if model set
+        var finalText = snapshot
+        if let path = whisperModelPath, !audioSamples.isEmpty {
+            do {
+                try await whisperEngine.initialize(modelPath: path)
+                let segments = try await whisperEngine.transcribe(audioSamples: audioSamples)
+                finalText = segments.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+                if finalText.isEmpty {
+                    finalText = snapshot
+                }
+            } catch {
+                finalText = snapshot
             }
-            try? await Task.sleep(for: .milliseconds(100))
         }
 
-        recognitionRequest = nil
-        recognitionTask = nil
         isListening = false
 
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
 
-        let candidate = finalizedTranscript.isEmpty ? partialTranscript : finalizedTranscript
-        let merged = candidate.isEmpty ? snapshot : candidate
-        let final = merged.trimmingCharacters(in: .whitespacesAndNewlines)
         partialTranscript = ""
-        finalizedTranscript = ""
-        return final
+        audioSamples = []
+        return finalText
     }
 }

@@ -1,15 +1,18 @@
 import Foundation
-import Speech
 
-/// Off–main-thread transcription with per-chunk checkpointing.
+/// Off–main-thread transcription with per-chunk checkpointing using whisper.cpp.
+/// (Apple SFSpeech removed — switched to local whisper.cpp for reliability + timestamps)
 actor TranscriptionEngine {
-    private var activeTask: SFSpeechRecognitionTask?
     private var isCancelled = false
+    private let whisperEngine = WhisperCppEngine()
+    private var whisperModelPath: String?
+
+    func configure(whisperModelPath: String) {
+        self.whisperModelPath = whisperModelPath
+    }
 
     func cancel() {
         isCancelled = true
-        activeTask?.cancel()
-        activeTask = nil
     }
 
     struct Result: Sendable {
@@ -30,10 +33,17 @@ actor TranscriptionEngine {
             if didAccess { mediaURL.stopAccessingSecurityScopedResource() }
         }
 
-        let recognizer = try await LocalSpeechGuard.ensureReady()
+        guard let modelPath = whisperModelPath else {
+            throw WhisperError.couldNotInitializeContext(path: "No whisper model configured. Call configure(whisperModelPath:) first.")
+        }
 
-        onProgress?(TranscriptionProgress(fraction: 0.05, message: "Preparing audio…", completedChunks: 0, totalChunks: 0))
+        onProgress?(TranscriptionProgress(fraction: 0.05, message: "Loading Whisper model…", completedChunks: 0, totalChunks: 0))
 
+        try await whisperEngine.initialize(modelPath: modelPath)
+
+        onProgress?(TranscriptionProgress(fraction: 0.1, message: "Preparing audio for Whisper…", completedChunks: 0, totalChunks: 0))
+
+        // For whisper we prefer direct 16kHz samples (no more M4A dependency for transcription)
         let audioURL: URL
         if let jobId,
            let checkpoint = TranscriptionCheckpointStore.load(jobId: jobId),
@@ -43,6 +53,7 @@ actor TranscriptionEngine {
                 throw AudioExtractorError.exportFailed("cached audio missing")
             }
         } else {
+            // Export to a temp location (we'll load samples directly)
             audioURL = try await AudioExtractor.exportAudio(from: mediaURL)
             if let jobId {
                 let dest = TranscriptionCheckpointStore.jobDirectory(jobId).appendingPathComponent("audio.m4a")
@@ -68,13 +79,22 @@ actor TranscriptionEngine {
 
             onProgress?(TranscriptionProgress(
                 fraction: Double(index) / Double(max(total, 1)),
-                message: "Transcribing part \(index + 1) of \(total)…",
+                message: "Transcribing part \(index + 1) of \(total) with Whisper…",
                 completedChunks: index,
                 totalChunks: total
             ))
 
-            let text = try await transcribeChunk(url: chunkURL, recognizer: recognizer)
-            if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let samples = try await AudioExtractor.loadWhisperSamples(from: chunkURL)
+            let segments = try await whisperEngine.transcribe(audioSamples: samples)
+
+            let text = segments.map { seg in
+                let startMin = Int(seg.start / 60)
+                let startSec = Int(seg.start.truncatingRemainder(dividingBy: 60))
+                return String(format: "[%02d:%02d] %@", startMin, startSec, seg.text)
+            }.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if !text.isEmpty {
+                // For now keep simple text output (timestamps available in segments for future)
                 if let jobId {
                     try TranscriptionCheckpointStore.appendTranscript(jobId: jobId, text: text)
                     if var checkpoint = TranscriptionCheckpointStore.load(jobId: jobId) {
@@ -105,84 +125,11 @@ actor TranscriptionEngine {
             transcript = inlineParts.joined(separator: "\n\n")
         }
 
-        // On-device URL recognition often returns empty without error — retry with en-US.
-        if transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           let fallback = SFSpeechRecognizer(locale: Locale(identifier: "en-US")),
-           fallback.isAvailable,
-           fallback.locale.identifier != recognizer.locale.identifier {
-            onProgress?(TranscriptionProgress(
-                fraction: 0.9,
-                message: "Retrying with English (US)…",
-                completedChunks: total,
-                totalChunks: total
-            ))
-            var retryParts: [String] = []
-            for chunkURL in chunks {
-                try Task.checkCancellation()
-                let text = try await transcribeChunk(url: chunkURL, recognizer: fallback)
-                if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    retryParts.append(text)
-                }
-            }
-            transcript = retryParts.joined(separator: "\n\n")
-        }
-
         onProgress?(TranscriptionProgress(fraction: 1, message: "Done", completedChunks: total, totalChunks: total))
+
+        // Clean up engine
+        await whisperEngine.deinitialize()
+
         return Result(transcript: transcript, totalChunks: total)
-    }
-
-    private func transcribeChunk(url: URL, recognizer: SFSpeechRecognizer) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
-            let request = SFSpeechURLRecognitionRequest(url: url)
-            request.shouldReportPartialResults = true
-            request.taskHint = .dictation
-            LocalSpeechGuard.applyOnDeviceOnly(to: request)
-
-            var resumed = false
-            var bestText = ""
-
-            func finish(_ text: String) {
-                guard !resumed else { return }
-                resumed = true
-                activeTask = nil
-                continuation.resume(returning: text.trimmingCharacters(in: .whitespacesAndNewlines))
-            }
-
-            activeTask = recognizer.recognitionTask(with: request) { [weak self] result, error in
-                if let error {
-                    guard !resumed else { return }
-                    if !bestText.isEmpty {
-                        finish(bestText)
-                    } else {
-                        resumed = true
-                        self?.activeTask = nil
-                        continuation.resume(throwing: error)
-                    }
-                    return
-                }
-                guard let result else { return }
-                let text = result.bestTranscription.formattedString
-                if !text.isEmpty {
-                    bestText = text
-                }
-                if result.isFinal {
-                    finish(bestText)
-                }
-            }
-
-            // On-device file recognition may never mark isFinal — use last partial after a wait.
-            Task {
-                for _ in 0..<600 {
-                    try? await Task.sleep(for: .milliseconds(100))
-                    if resumed || isCancelled { return }
-                    if activeTask?.isFinishing == true || activeTask?.state == .completed {
-                        break
-                    }
-                }
-                if !resumed {
-                    finish(bestText)
-                }
-            }
-        }
     }
 }
