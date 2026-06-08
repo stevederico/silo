@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct ContentView: View {
     @StateObject var llamaState = LlamaState()
@@ -7,7 +8,15 @@ struct ContentView: View {
     @State private var drawerOffset: CGFloat = 0
     @State private var showSettings = false
     @State private var showManageModels = false
+    @State private var showVideoPicker = false
+    @State private var videoPickerItem: PhotosPickerItem?
+    @State private var showTranscript = false
+    @State private var videoImportError: String?
+    @State private var showVideoTranscriptBanner = false
+    @StateObject private var jobManager = TranscriptionJobManager()
+    @StateObject private var voiceSession = VoiceSession()
     @FocusState private var isFocused: Bool
+    @State private var voiceErrorMessage: String?
 
     private let drawerWidth: CGFloat = 300
 
@@ -27,6 +36,7 @@ struct ContentView: View {
                         drawerOffset = 0
                     },
                     onNewChat: {
+                        dismissVideoTranscriptBanner()
                         Task {
                             await llamaState.clear()
                         }
@@ -74,6 +84,7 @@ struct ContentView: View {
                             Task { try? await llamaState.loadModel(modelUrl: fileURL) }
                         },
                         onNewChat: {
+                            dismissVideoTranscriptBanner()
                             Task {
                                 await llamaState.clear()
                             }
@@ -82,6 +93,25 @@ struct ContentView: View {
                             showManageModels = true
                         }
                     )
+
+                    if let modelError = llamaState.modelLoadError, !llamaState.isModelLoaded, !llamaState.isLoadingModel {
+                        Text(modelError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 4)
+                    }
+
+                    if showVideoTranscriptBanner {
+                        VideoTranscriptBanner(
+                            phase: videoTranscriptBannerPhase,
+                            thumbnail: jobManager.videoThumbnail ?? llamaState.attachedVideoThumbnail,
+                            onViewTranscript: { showTranscript = true },
+                            onDismiss: dismissVideoTranscriptBanner,
+                            onCancelTranscription: jobManager.isRunning ? { jobManager.cancel() } : nil
+                        )
+                    }
 
                     // Chat area
                     if llamaState.messages.isEmpty && !llamaState.isGenerating {
@@ -93,8 +123,17 @@ struct ContentView: View {
                             ScrollView {
                                 LazyVStack(spacing: 12) {
                                     ForEach(llamaState.messages) { message in
-                                        MessageBubble(message: message)
+                                        if message.isVideoTranscriptAttachment {
+                                            VideoTranscriptMessageBubble(
+                                                characterCount: llamaState.transcriptCharacterCount,
+                                                thumbnail: llamaState.attachedVideoThumbnail ?? jobManager.videoThumbnail,
+                                                onTap: { showTranscript = true }
+                                            )
                                             .id(message.id)
+                                        } else {
+                                            MessageBubble(message: message)
+                                                .id(message.id)
+                                        }
                                     }
 
                                     if llamaState.isGenerating && llamaState.isThinking && llamaState.currentResponse.isEmpty {
@@ -153,10 +192,30 @@ struct ContentView: View {
                     InputComposer(
                         text: $inputText,
                         isGenerating: llamaState.isGenerating,
-                        onSend: sendMessage,
+                        isListening: voiceSession.isListening,
+                        inputsDisabled: llamaState.modelSuspendedForSpeech || llamaState.speechSynthesizer.isSpeaking,
+                        onSend: { Task { await submitMessage() } },
                         onStop: stopGeneration,
+                        onVideoImport: { showVideoPicker = true },
+                        onVoiceToggle: { Task { await handleVoiceToggle() } },
+                        onHoldVoiceStart: { Task { await startVoiceInput() } },
+                        onHoldVoiceEnd: { Task { await submitMessage() } },
                         focusState: $isFocused
                     )
+                    if let voiceErrorMessage {
+                        Text(voiceErrorMessage)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 4)
+                    }
+                    if let videoImportError, !showVideoTranscriptBanner {
+                        Text(videoImportError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .padding(.horizontal, 20)
+                            .padding(.bottom, 4)
+                    }
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height)
                 .offset(x: drawerOffset)
@@ -202,35 +261,178 @@ struct ContentView: View {
             .sheet(isPresented: $showManageModels) {
                 ManageModelsView(llamaState: llamaState)
             }
+            .photosPicker(
+                isPresented: $showVideoPicker,
+                selection: $videoPickerItem,
+                matching: .videos
+            )
+            .sheet(isPresented: $showTranscript) {
+                TranscriptSheetLoader(llamaState: llamaState)
+            }
         }
         .background(Color(.systemBackground))
         .onAppear {
             llamaState.conversationManager = conversationManager
+            jobManager.llamaState = llamaState
             isFocused = true
+            Task {
+                if !llamaState.isModelLoaded, !llamaState.downloadedModels.isEmpty {
+                    _ = await llamaState.ensureModelLoaded()
+                }
+            }
+        }
+        .onChange(of: voiceSession.partialTranscript) { _, newValue in
+            guard voiceSession.isListening else { return }
+            if !newValue.isEmpty {
+                inputText = newValue
+            }
+        }
+        .onChange(of: voiceSession.isListening) { _, isListening in
+            if isListening {
+                inputText = ""
+                voiceErrorMessage = nil
+            }
+        }
+        .onChange(of: voiceSession.errorMessage) { _, message in
+            voiceErrorMessage = message
+        }
+        .onChange(of: videoPickerItem) { _, newItem in
+            guard let newItem else { return }
+            showVideoTranscriptBanner = true
+            jobManager.clearFailure()
+            videoImportError = nil
+            Task { await handlePickedVideo(newItem) }
         }
     }
 
-    private func sendMessage() {
-        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !llamaState.isGenerating else { return }
+    private var videoTranscriptBannerPhase: VideoTranscriptBanner.Phase {
+        if let failure = jobManager.failureMessage {
+            return .failed(message: failure)
+        }
+        if jobManager.isRunning {
+            return .transcribing(
+                progress: jobManager.progress,
+                message: jobManager.statusMessage,
+                modelSuspended: llamaState.modelSuspendedForSpeech
+            )
+        }
+        if llamaState.transcriptCharacterCount > 0 {
+            return .ready(characterCount: llamaState.transcriptCharacterCount)
+        }
+        if let videoImportError {
+            return .failed(message: videoImportError)
+        }
+        if jobManager.statusMessage == "Cancelled" {
+            return .failed(message: "Cancelled")
+        }
+        return .preparing
+    }
 
-        // Show manage models if no models installed
+    private func dismissVideoTranscriptBanner() {
+        if jobManager.isRunning {
+            jobManager.cancel()
+        }
+        jobManager.clearFailure()
+        videoImportError = nil
+        showVideoTranscriptBanner = false
+        llamaState.clearVideoTranscriptAttachment()
+    }
+
+    @MainActor
+    private func handlePickedVideo(_ item: PhotosPickerItem) async {
+        videoPickerItem = nil
+        do {
+            guard let movie = try await item.loadTransferable(type: ImportedVideoFile.self) else {
+                videoImportError = "Could not load video from Photos."
+                return
+            }
+            _ = try await jobManager.startJob(mediaURL: movie.url, llamaState: llamaState)
+        } catch {
+            videoImportError = error.localizedDescription
+            jobManager.clearFailure()
+        }
+    }
+
+    @MainActor
+    private func submitMessage() async {
+        guard !llamaState.isGenerating else { return }
+
+        if llamaState.modelSuspendedForSpeech {
+            voiceErrorMessage = "Model is reloading after transcription. Wait a moment."
+            return
+        }
+
+        if voiceSession.isListening {
+            let spoken = await voiceSession.stopListening()
+            if !spoken.isEmpty {
+                inputText = spoken
+            }
+        }
+
+        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            voiceErrorMessage = "No speech detected. Try again."
+            return
+        }
+
+        voiceErrorMessage = nil
+
         if llamaState.downloadedModels.isEmpty {
             showManageModels = true
             return
         }
 
-        inputText = ""
-
-        Task {
-            await llamaState.complete(text: text)
+        if !llamaState.isModelLoaded {
+            let loaded = await llamaState.ensureModelLoaded()
+            if !loaded {
+                voiceErrorMessage = llamaState.modelLoadError ?? "Could not load model."
+                return
+            }
         }
+
+        let messageToSend = text
+        inputText = ""
+        await llamaState.complete(text: messageToSend)
     }
 
     private func stopGeneration() {
         Task {
             await llamaState.stop()
         }
+    }
+
+    private func startVoiceInput() async {
+        guard !voiceSession.isListening else { return }
+        if llamaState.speechSynthesizer.isSpeaking {
+            llamaState.speechSynthesizer.stop()
+        }
+        guard !llamaState.modelSuspendedForSpeech else { return }
+
+        isFocused = false
+        voiceErrorMessage = nil
+        do {
+            try await voiceSession.startListening()
+        } catch {
+            voiceErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func handleVoiceToggle() async {
+        if llamaState.speechSynthesizer.isSpeaking {
+            llamaState.speechSynthesizer.stop()
+            return
+        }
+        if llamaState.modelSuspendedForSpeech { return }
+
+        if voiceSession.isListening {
+            let spoken = await voiceSession.stopListening()
+            if !spoken.isEmpty {
+                inputText = spoken
+            }
+            await submitMessage()
+            return
+        }
+        await startVoiceInput()
     }
 }
 

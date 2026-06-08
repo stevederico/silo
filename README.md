@@ -43,7 +43,7 @@ Build and run on an iPhone or simulator running iOS 18.2+.
 - **Works offline** — airplane mode, subway, off-grid
 
 ### 🧠 **Models**
-- **Gemma 4 E2B** from Google (Q4 default, Q8 optional)
+- **Gemma 4 E2B** from Google (Q4 QAT default — quantization-aware training for higher quality at lower memory, Q8 optional)
 - **Ministral 3B** from Mistral — balanced instruct model
 - **LFM 2.5** from Liquid AI — fast 1.2B instruct model
 - **Bring your own GGUF** from any Hugging Face URL
@@ -106,7 +106,9 @@ cd silo
 open Silo.xcodeproj
 ```
 
-Open an issue before large changes. Keep PRs scoped. Set your own `DEVELOPMENT_TEAM` and `PRODUCT_BUNDLE_IDENTIFIER` before building on a device.
+Open an issue before large changes. Keep PRs scoped.
+
+**Local device builds:** Set your Apple Development Team in Xcode (Signing & Capabilities). Do **not** commit team IDs, provisioning profiles, or bundle ID changes—the repo uses `com.example.silo` and empty `DEVELOPMENT_TEAM` in the project file. Optional: copy `Config/Signing.local.xcconfig.example` to `Config/Signing.local.xcconfig` (gitignored) and set `DEVELOPMENT_TEAM` there.
 
 <br />
 

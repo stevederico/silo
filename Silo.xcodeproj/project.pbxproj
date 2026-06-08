@@ -7,10 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		5B6FDDAB2C1A6997B4549BBD /* whisper.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 9EBE689DB487DCCC4E1D8724 /* whisper.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		72BA6DB42D4AD42100D97817 /* Metal.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 72BA6DB32D4AD42100D97817 /* Metal.framework */; };
 		72BA6DB62D4AD42600D97817 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 72BA6DB52D4AD42600D97817 /* Accelerate.framework */; };
 		72BA6DB72D4AD50000D97817 /* llama.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 72BA6DB82D4AD50000D97817 /* llama.xcframework */; };
 		72BA6DB92D4AD50000D97817 /* llama.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 72BA6DB82D4AD50000D97817 /* llama.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		B323D323981259EFA267C205 /* whisper.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9EBE689DB487DCCC4E1D8724 /* whisper.xcframework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -21,6 +23,7 @@
 			dstSubfolderSpec = 10;
 			files = (
 				72BA6DB92D4AD50000D97817 /* llama.xcframework in Embed Frameworks */,
+				5B6FDDAB2C1A6997B4549BBD /* whisper.xcframework in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -32,6 +35,8 @@
 		72BA6DB32D4AD42100D97817 /* Metal.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Metal.framework; path = System/Library/Frameworks/Metal.framework; sourceTree = SDKROOT; };
 		72BA6DB52D4AD42600D97817 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
 		72BA6DB82D4AD50000D97817 /* llama.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = llama.xcframework; sourceTree = "<group>"; };
+		9EBE689DB487DCCC4E1D8724 /* whisper.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = whisper.xcframework; sourceTree = "<group>"; };
+		AFECFABEC2CC4C987C423416 /* models/whisper/ggml-small.en-q5_1.bin */ = {isa = PBXFileReference; lastKnownFileType = archive.macbinary; path = "models/whisper/ggml-small.en-q5_1.bin"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -66,6 +71,7 @@
 				72BA6DB62D4AD42600D97817 /* Accelerate.framework in Frameworks */,
 				72BA6DB42D4AD42100D97817 /* Metal.framework in Frameworks */,
 				72BA6DB72D4AD50000D97817 /* llama.xcframework in Frameworks */,
+				B323D323981259EFA267C205 /* whisper.xcframework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -76,6 +82,8 @@
 			isa = PBXGroup;
 			children = (
 				72BA6DB82D4AD50000D97817 /* llama.xcframework */,
+				9EBE689DB487DCCC4E1D8724 /* whisper.xcframework */,
+				AFECFABEC2CC4C987C423416 /* models/whisper/ggml-small.en-q5_1.bin */,
 				72BA6D8D2D4AD2B000D97817 /* Silo */,
 				72BA6DB22D4AD42100D97817 /* Frameworks */,
 				72BA6D8C2D4AD2B000D97817 /* Products */,
@@ -131,7 +139,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1620;
-				LastUpgradeCheck = 2620;
+				LastUpgradeCheck = 2630;
 				TargetAttributes = {
 					72BA6D8A2D4AD2B000D97817 = {
 						CreatedOnToolsVersion = 16.2;
@@ -309,13 +317,15 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Silo/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Silo;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Silo uses the microphone for on-device voice mode.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Silo needs access to pick interview videos from your photo library.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Silo transcribes videos and voice on your device only. Audio is never sent to the cloud.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -346,13 +356,15 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Silo/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Silo;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Silo uses the microphone for on-device voice mode.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Silo needs access to pick interview videos from your photo library.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Silo transcribes videos and voice on your device only. Audio is never sent to the cloud.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
