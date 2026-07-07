@@ -6,6 +6,12 @@
 - passcode
 - copy and other icons udner message
 
+- Add Gemma 4 E2B QAT (Quantization-Aware Training) as default — better quality + efficiency on-device via latest Unsloth GGUF (matches llama.cpp)
+
+2.2.0
+
+  Add AGENTS.md
+
 2.1.0
 
   Add streaming markdown

@@ -26,7 +26,12 @@ actor LlamaCppEngine: InferenceEngine {
 
         let finalPrompt = await context.apply_chat_template(messages: messages)
         // print("Formatted prompt:\n\(finalPrompt)")
-        try await context.completion_init_with_cache(text: finalPrompt)
+        do {
+            try await context.completion_init_with_cache(text: finalPrompt)
+        } catch {
+            await context.clear()
+            try await context.completion_init(text: finalPrompt)
+        }
         isComplete = false
     }
 
@@ -37,7 +42,12 @@ actor LlamaCppEngine: InferenceEngine {
             ])
         }
         let finalPrompt = await context.apply_chat_template(messages: messages)
-        try await context.completion_init_with_cache(text: finalPrompt)
+        do {
+            try await context.completion_init_with_cache(text: finalPrompt)
+        } catch {
+            await context.clear()
+            try await context.completion_init(text: finalPrompt)
+        }
         isComplete = true
     }
 

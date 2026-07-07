@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 struct Model: Identifiable {
     var id = UUID()
@@ -22,6 +23,12 @@ struct ChatMessage: Identifiable, Codable {
         self.content = content
         self.isUser = isUser
         self.timestamp = timestamp
+    }
+
+    static let videoTranscriptAttachmentPrefix = "Interview transcript attached"
+
+    var isVideoTranscriptAttachment: Bool {
+        isUser && content.hasPrefix(Self.videoTranscriptAttachmentPrefix)
     }
 
     var displayContent: String {
@@ -220,13 +227,26 @@ struct Conversation: Identifiable, Codable {
     let id: UUID
     var title: String
     var messages: [ChatMessage]
+    var transcript: String?
+    /// Relative path under Documents (e.g. `transcripts/<id>.txt`) for long transcripts.
+    var transcriptFilename: String?
     let createdAt: Date
     var updatedAt: Date
 
-    init(id: UUID = UUID(), title: String = "New Chat", messages: [ChatMessage] = [], createdAt: Date = Date(), updatedAt: Date = Date()) {
+    init(
+        id: UUID = UUID(),
+        title: String = "New Chat",
+        messages: [ChatMessage] = [],
+        transcript: String? = nil,
+        transcriptFilename: String? = nil,
+        createdAt: Date = Date(),
+        updatedAt: Date = Date()
+    ) {
         self.id = id
         self.title = title
         self.messages = messages
+        self.transcript = transcript
+        self.transcriptFilename = transcriptFilename
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -277,7 +297,66 @@ class LlamaState: ObservableObject {
     @Published var downloadedModels: [Model] = []
     @Published var undownloadedModels: [Model] = []
     @Published var currentConversation: Conversation?
+    @Published var conversationTranscript: String?
+    @Published private(set) var transcriptCharacterCount = 0
+    @Published var attachedVideoThumbnail: UIImage?
+    @Published var attachedTranscriptionJobId: UUID?
+    @Published var modelSuspendedForSpeech = false
     @Published var modelLoadError: String?
+    @Published var speakRepliesEnabled: Bool {
+        didSet { UserDefaults.standard.set(speakRepliesEnabled, forKey: "speakRepliesEnabled") }
+    }
+
+    let speechSynthesizer = SpeechSynthesizerService()
+    private var suspendedModelURL: URL?
+
+    // Whisper models (reused download system)
+    let whisperModels: [Model] = [
+        Model(name: "Whisper Small EN (q5_1)", url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en-q5_1.bin", filename: "ggml-small.en-q5_1.bin"),
+        Model(name: "Whisper Base EN", url: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin", filename: "ggml-base.en.bin"),
+    ]
+    @Published var downloadedWhisperModels: [Model] = []
+
+    func defaultWhisperModelPath() -> String? {
+        let preferred = "ggml-small.en-q5_1.bin"
+        let docsURL = getDocumentsDirectory().appendingPathComponent(preferred)
+        
+        // If already in documents, use it
+        if FileManager.default.fileExists(atPath: docsURL.path) {
+            return docsURL.path
+        }
+        
+        // Check if bundled in app (from Silo/models/whisper/)
+        if let bundleURL = Bundle.main.url(forResource: "ggml-small.en-q5_1", withExtension: "bin", subdirectory: "models/whisper") {
+            // Copy to documents for runtime use
+            do {
+                try FileManager.default.copyItem(at: bundleURL, to: docsURL)
+                print("Copied bundled whisper model to documents")
+                return docsURL.path
+            } catch {
+                print("Failed to copy bundled model: \(error)")
+                return bundleURL.path  // fallback to bundle path directly
+            }
+        }
+        
+        // fallback to first downloaded whisper in docs
+        if let first = downloadedWhisperModels.first {
+            let url = getDocumentsDirectory().appendingPathComponent(first.filename)
+            if FileManager.default.fileExists(atPath: url.path) {
+                return url.path
+            }
+        }
+        return nil
+    }
+
+    func downloadWhisperModel(_ model: Model) {
+        startDownload(modelName: model.name, modelUrl: model.url, filename: model.filename)
+        // After download, refresh list (simplified; in real would observe)
+        Task {
+            try? await Task.sleep(for: .seconds(1))
+            await MainActor.run { self.loadWhisperModelsFromDisk() }
+        }
+    }
 
     // Active download tracking — persists across modal dismiss/re-present
     @Published var activeDownloads: [String: Double] = [:]  // filename -> progress
@@ -381,6 +460,158 @@ class LlamaState: ObservableObject {
     private var inferenceEngine: InferenceEngine?
     var conversationManager: ConversationManager?
 
+    var isModelLoaded: Bool { inferenceEngine != nil }
+
+    private func ggufFilesInDocuments() -> [URL] {
+        let documents = getDocumentsDirectory()
+        let files = (try? FileManager.default.contentsOfDirectory(at: documents, includingPropertiesForKeys: nil)) ?? []
+        return files.filter { $0.pathExtension.lowercased() == "gguf" }
+    }
+
+    private func fileSize(at url: URL) -> Int64 {
+        (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+    }
+
+    private func resolveModelFileURL() -> URL? {
+        let ggufs = ggufFilesInDocuments()
+        guard !ggufs.isEmpty else { return nil }
+
+        #if targetEnvironment(simulator)
+        let loadable = ggufs.filter { fileSize(at: $0) <= Self.simulatorMaxModelBytes }
+        if let smallest = loadable.min(by: { fileSize(at: $0) < fileSize(at: $1) }) {
+            return smallest
+        }
+        return nil
+        #else
+
+        if !currentModelName.isEmpty,
+           let match = ggufs.first(where: { $0.deletingPathExtension().lastPathComponent == currentModelName }) {
+            return match
+        }
+        return ggufs.first
+        #endif
+    }
+
+    #if targetEnvironment(simulator)
+    private func bootstrapSimulatorModelIfNeeded() async {
+        if resolveModelFileURL() != nil {
+            if !isModelLoaded {
+                _ = await ensureModelLoaded()
+            }
+            return
+        }
+        // Only oversized models on disk (e.g. Gemma 4) — fetch a Simulator-friendly default.
+        modelLoadError = "Gemma 4 is too large for Simulator. Downloading LFM2.5 (1.2 GB)…"
+        let lfm = Self.lfmSimulatorModel
+        if !FileManager.default.fileExists(atPath: getDocumentsDirectory().appendingPathComponent(lfm.filename).path) {
+            downloadModel(lfm)
+        }
+    }
+
+    func downloadModel(_ model: Model) {
+        guard let url = URL(string: model.url) else { return }
+        let filename = model.filename
+        guard activeDownloads[filename] == nil else { return }
+
+        let fileURL = getDocumentsDirectory().appendingPathComponent(filename)
+        try? FileManager.default.removeItem(at: fileURL)
+
+        activeDownloads[filename] = 0.0
+        pendingDownloadMeta[filename] = (name: model.name, url: model.url)
+
+        let task = URLSession.shared.downloadTask(with: url) { [weak self] temporaryURL, response, error in
+            guard let self else { return }
+            if let error = error as? NSError, error.code == NSURLErrorCancelled {
+                Task { @MainActor in self.cleanupDownload(filename: filename) }
+                return
+            }
+            if error != nil {
+                Task { @MainActor in self.cleanupDownload(filename: filename) }
+                return
+            }
+            guard let response = response as? HTTPURLResponse, (200...299).contains(response.statusCode),
+                  let temporaryURL = temporaryURL else {
+                Task { @MainActor in self.cleanupDownload(filename: filename) }
+                return
+            }
+            do {
+                try FileManager.default.copyItem(at: temporaryURL, to: fileURL)
+                let size = (try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.size] as? Int64) ?? 0
+                if size < 1_000_000 {
+                    try? FileManager.default.removeItem(at: fileURL)
+                    Task { @MainActor in self.cleanupDownload(filename: filename) }
+                    return
+                }
+                Task { @MainActor in
+                    self.cleanupDownload(filename: filename)
+                    self.registerDownloadedModel(filename: filename, fallbackName: model.name, url: model.url)
+                    try? await self.loadModel(modelUrl: fileURL)
+                }
+            } catch {
+                Task { @MainActor in self.cleanupDownload(filename: filename) }
+            }
+        }
+        downloadTasks[filename] = task
+        downloadObservations[filename] = task.progress.observe(\.fractionCompleted) { [weak self] progress, _ in
+            Task { @MainActor in self?.activeDownloads[filename] = progress.fractionCompleted }
+        }
+        task.resume()
+    }
+    #endif
+
+    private func initializeEngine(at modelURL: URL) async throws {
+        let engine = LlamaCppEngine()
+        inferenceEngine = engine
+        do {
+            try await engine.initialize(modelPath: modelURL.path(), contextSize: contextSize) { [weak self] progress in
+                Task { @MainActor in
+                    self?.modelLoadProgress = Double(progress)
+                }
+            }
+        } catch {
+            inferenceEngine = nil
+            throw error
+        }
+        currentModelName = modelURL.deletingPathExtension().lastPathComponent
+        registerDownloadedModel(
+            filename: modelURL.lastPathComponent,
+            fallbackName: currentModelName
+        )
+    }
+
+    /// Loads the on-disk GGUF if the engine was unloaded (e.g. after video transcription).
+    func ensureModelLoaded() async -> Bool {
+        if inferenceEngine != nil { return true }
+
+        if modelSuspendedForSpeech {
+            await resumeModelAfterSpeech()
+            if inferenceEngine != nil { return true }
+        }
+
+        guard let modelURL = resolveModelFileURL() else {
+            #if targetEnvironment(simulator)
+            modelLoadError = "No Simulator-sized model found. Open Manage Models and download LFM2.5 (1.2 GB), or wait for the automatic download."
+            Task { await bootstrapSimulatorModelIfNeeded() }
+            #else
+            modelLoadError = "No model file found on device."
+            #endif
+            return false
+        }
+
+        isLoadingModel = true
+        modelLoadProgress = 0
+        modelLoadError = nil
+        defer { isLoadingModel = false }
+
+        do {
+            try await initializeEngine(at: modelURL)
+            return true
+        } catch {
+            modelLoadError = Self.describeLoadError(error)
+            return false
+        }
+    }
+
     // Streaming state promoted to instance vars for stop() access
     private var isStopped = false
     private var rawResponse = ""
@@ -392,14 +623,29 @@ class LlamaState: ObservableObject {
 
     init() {
         self.systemPrompt = UserDefaults.standard.string(forKey: "systemPrompt") ?? ""
+        self.speakRepliesEnabled = UserDefaults.standard.bool(forKey: "speakRepliesEnabled")
         let saved = UserDefaults.standard.integer(forKey: "contextSize")
+        #if targetEnvironment(simulator)
+        self.contextSize = saved > 0 ? UInt32(min(saved, 2048)) : 2048
+        #else
         self.contextSize = saved > 0 ? UInt32(saved) : 4096
+        #endif
         loadModelsFromDisk()
         loadDownloadableModels()
+        loadWhisperModelsFromDisk()
         if downloadedModels.isEmpty {
             downloadDefaultModel()
+        } else {
+            #if targetEnvironment(simulator)
+            Task { await bootstrapSimulatorModelIfNeeded() }
+            #endif
         }
     }
+
+    #if targetEnvironment(simulator)
+    /// GGUF larger than this usually fails to load in Simulator (use LFM2.5 instead).
+    private static let simulatorMaxModelBytes: Int64 = 1_600_000_000
+    #endif
 
     private func catalogModel(forFilename filename: String) -> Model? {
         downloadableModels.first { $0.filename == filename }
@@ -435,13 +681,35 @@ class LlamaState: ObservableObject {
                 registerDownloadedModel(filename: modelURL.lastPathComponent, fallbackName: fallbackName)
             }
 
-            if let firstURL = modelURLs.first {
+            if let url = resolveModelFileURL() {
                 Task {
-                    try? await loadModel(modelUrl: firstURL)
+                    try? await loadModel(modelUrl: url)
                 }
             }
         } catch {
             print("Error loading models from disk: \(error)")
+        }
+    }
+
+    private func loadWhisperModelsFromDisk() {
+        do {
+            let documentsURL = getDocumentsDirectory()
+            let allURLs = try FileManager.default.contentsOfDirectory(at: documentsURL, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants])
+            let whisperURLs = allURLs.filter { $0.lastPathComponent.hasPrefix("ggml-") && $0.pathExtension.lowercased() == "bin" }
+            for url in whisperURLs {
+                let filename = url.lastPathComponent
+                if !downloadedWhisperModels.contains(where: { $0.filename == filename }) {
+                    if let catalog = whisperModels.first(where: { $0.filename == filename }) {
+                        var entry = catalog
+                        entry.status = "downloaded"
+                        downloadedWhisperModels.append(entry)
+                    } else {
+                        downloadedWhisperModels.append(Model(name: filename, url: "", filename: filename, status: "downloaded"))
+                    }
+                }
+            }
+        } catch {
+            print("Error loading whisper models from disk: \(error)")
         }
     }
 
@@ -466,7 +734,7 @@ class LlamaState: ObservableObject {
     private var defaultDownloadObservation: NSKeyValueObservation?
 
     private func downloadDefaultModel() {
-        let model = LlamaState.defaultModel
+        let model = Self.defaultModelForPlatform
         guard let url = URL(string: model.url) else { return }
         let fileURL = getDocumentsDirectory().appendingPathComponent(model.filename)
 
@@ -548,11 +816,26 @@ class LlamaState: ObservableObject {
     }
 
     static let defaultModel = Model(
-        name: "Gemma 4 E2B Instruct Q4 (2.9 GiB)",
-        url: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf?download=true",
-        filename: "gemma-4-E2B-it-Q4_K_M.gguf",
+        name: "Gemma 4 E2B Instruct Q4 QAT (2.6 GiB)",
+        url: "https://huggingface.co/unsloth/gemma-4-E2B-it-qat-GGUF/resolve/main/gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf?download=true",
+        filename: "gemma-4-E2B-it-qat-UD-Q4_K_XL.gguf",
         status: "download",
-        released: catalogDate(2026, 4, 2))
+        released: catalogDate(2026, 6, 5))
+
+    static let lfmSimulatorModel = Model(
+        name: "LFM2.5-1.2B Instruct Q8 (1.2 GiB)",
+        url: "https://huggingface.co/LiquidAI/LFM2.5-1.2B-Instruct-GGUF/resolve/main/LFM2.5-1.2B-Instruct-Q8_0.gguf?download=true",
+        filename: "LFM2.5-1.2B-Instruct-Q8_0.gguf",
+        status: "download",
+        released: catalogDate(2026, 1, 5))
+
+    static var defaultModelForPlatform: Model {
+        #if targetEnvironment(simulator)
+        return lfmSimulatorModel
+        #else
+        return defaultModel
+        #endif
+    }
 
     private static let allDownloadableModels: [Model] = [
         LlamaState.defaultModel,
@@ -568,6 +851,12 @@ class LlamaState: ObservableObject {
               filename: "Ministral-3-3B-Instruct-2512-Q4_K_M.gguf",
               status: "download",
               released: catalogDate(2025, 12, 2)),
+
+        Model(name: "Gemma 4 E2B Instruct Q4 (2.9 GiB)",
+              url: "https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q4_K_M.gguf?download=true",
+              filename: "gemma-4-E2B-it-Q4_K_M.gguf",
+              status: "download",
+              released: catalogDate(2026, 4, 2)),
 
         Model(name: "Gemma 4 E2B Instruct Q8 (4.6 GiB)",
               url: "https://huggingface.co/ggml-org/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q8_0.gguf?download=true",
@@ -602,40 +891,198 @@ class LlamaState: ObservableObject {
         await inferenceEngine?.deinitialize()
         inferenceEngine = nil
 
-        let engine = LlamaCppEngine()
-        inferenceEngine = engine
         do {
-            try await engine.initialize(modelPath: modelUrl.path(), contextSize: contextSize) { [weak self] progress in
-                Task { @MainActor in
-                    self?.modelLoadProgress = Double(progress)
-                }
-            }
+            try await initializeEngine(at: modelUrl)
         } catch {
             isLoadingModel = false
-            modelLoadError = error.localizedDescription
-            inferenceEngine = nil
+            modelLoadError = Self.describeLoadError(error)
             throw error
         }
 
         isLoadingModel = false
-        messages = []
-        registerDownloadedModel(
-            filename: modelUrl.lastPathComponent,
-            fallbackName: modelUrl.deletingPathExtension().lastPathComponent
-        )
-        currentModelName = modelUrl.deletingPathExtension().lastPathComponent
+        modelLoadError = nil
         print("Loaded model")
     }
 
-    private func chatMessagesForInference() -> [(role: String, content: String)] {
+    private static func describeLoadError(_ error: Error) -> String {
+        if let localized = error as? LocalizedError, let description = localized.errorDescription {
+            return description
+        }
+        return error.localizedDescription
+    }
+
+    private static func transcriptSystemMessage(_ transcript: String) -> String {
+        let maxChars = 100_000
+        let body = transcript.count > maxChars ? String(transcript.prefix(maxChars)) + "\n…[truncated]" : transcript
+        return """
+        The user attached a video transcript. Answer only using information from this transcript. If the answer is not in the transcript, say so clearly.
+
+        Transcript:
+        \(body)
+        """
+    }
+
+    func resolvedTranscriptText() -> String? {
+        if let conversationTranscript, !conversationTranscript.isEmpty {
+            return conversationTranscript
+        }
+        if let inline = currentConversation?.transcript, !inline.isEmpty {
+            return inline
+        }
+        return nil
+    }
+
+    /// Loads transcript text off the main thread when it is only stored on disk.
+    func loadResolvedTranscriptText() async -> String? {
+        if let cached = resolvedTranscriptText() {
+            return cached
+        }
+        guard let filename = currentConversation?.transcriptFilename else { return nil }
+        let url = getDocumentsDirectory().appendingPathComponent(filename)
+        let text = await Task.detached(priority: .userInitiated) {
+            try? String(contentsOf: url, encoding: .utf8)
+        }.value
+        if let text, !text.isEmpty {
+            conversationTranscript = text
+            transcriptCharacterCount = text.count
+        }
+        return text
+    }
+
+    private func setTranscriptContext(text: String?, jobId: UUID?) {
+        conversationTranscript = text
+        transcriptCharacterCount = text?.count ?? 0
+        attachedTranscriptionJobId = jobId
+        refreshAttachedVideoThumbnail()
+    }
+
+    func refreshAttachedVideoThumbnail() {
+        if let jobId = attachedTranscriptionJobId,
+           let image = VideoThumbnailGenerator.loadJobThumbnail(jobId: jobId) {
+            attachedVideoThumbnail = image
+            return
+        }
+        if let conversationId = currentConversation?.id,
+           let image = VideoThumbnailGenerator.loadConversationThumbnail(conversationId: conversationId) {
+            attachedVideoThumbnail = image
+            return
+        }
+        attachedVideoThumbnail = nil
+    }
+
+    private func appendTranscriptContext(to chatMessages: inout [(role: String, content: String)]) async {
+        guard let transcript = await loadResolvedTranscriptText(), !transcript.isEmpty else { return }
+        chatMessages.append((role: "system", content: Self.transcriptSystemMessage(transcript)))
+    }
+
+    private func saveTranscriptToDisk(conversationId: UUID, transcript: String) throws -> String {
+        let dir = getDocumentsDirectory().appendingPathComponent("transcripts", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let relative = "transcripts/\(conversationId.uuidString).txt"
+        let url = getDocumentsDirectory().appendingPathComponent(relative)
+        try transcript.write(to: url, atomically: true, encoding: .utf8)
+        return relative
+    }
+
+    func suspendModelForSpeech() async {
+        guard inferenceEngine != nil else { return }
+        if isGenerating { await stop() }
+
+        suspendedModelURL = resolveModelFileURL()
+
+        await inferenceEngine?.deinitialize()
+        inferenceEngine = nil
+        modelSuspendedForSpeech = true
+    }
+
+    func resumeModelAfterSpeech() async {
+        guard modelSuspendedForSpeech else { return }
+        defer {
+            modelSuspendedForSpeech = false
+            suspendedModelURL = nil
+        }
+        guard let modelURL = suspendedModelURL ?? resolveModelFileURL() else {
+            modelLoadError = "Could not find model file to reload."
+            return
+        }
+
+        isLoadingModel = true
+        modelLoadProgress = 0
+        modelLoadError = nil
+
+        do {
+            try await initializeEngine(at: modelURL)
+        } catch {
+            modelLoadError = Self.describeLoadError(error)
+        }
+        isLoadingModel = false
+    }
+
+    private func chatMessagesForInference() async -> [(role: String, content: String)] {
         var chatMessages: [(role: String, content: String)] = []
         if !systemPrompt.isEmpty {
             chatMessages.append((role: "system", content: systemPrompt))
         }
+        await appendTranscriptContext(to: &chatMessages)
         for msg in messages {
             chatMessages.append((role: msg.isUser ? "user" : "assistant", content: msg.content))
         }
         return chatMessages
+    }
+
+    /// Starts a new chat with an on-device video transcript as grounding context.
+    func attachVideoTranscript(_ transcript: String, transcriptJobId: UUID? = nil) async {
+        saveCurrentConversation()
+        messages = []
+
+        var text = transcript
+        if let jobId = transcriptJobId {
+            let jobTranscript = await Task.detached(priority: .userInitiated) {
+                TranscriptionCheckpointStore.readTranscript(jobId: jobId)
+            }.value
+            if let jobTranscript, !jobTranscript.isEmpty {
+                text = jobTranscript
+            }
+        }
+
+        var conversation = conversationManager?.createNew() ?? Conversation()
+        conversation.title = "Video chat"
+
+        if let jobId = transcriptJobId {
+            VideoThumbnailGenerator.copyJobThumbnailToConversation(jobId: jobId, conversationId: conversation.id)
+        }
+
+        if let relative = try? saveTranscriptToDisk(conversationId: conversation.id, transcript: text) {
+            conversation.transcriptFilename = relative
+            conversation.transcript = nil
+        } else {
+            conversation.transcript = text
+        }
+        currentConversation = conversation
+        setTranscriptContext(text: text, jobId: transcriptJobId)
+
+        let preview = "\(ChatMessage.videoTranscriptAttachmentPrefix) (\(text.count) characters). Ask questions about the video."
+        messages = [ChatMessage(content: preview, isUser: true, timestamp: Date())]
+        conversation.messages = messages
+        conversationManager?.save(conversation)
+        conversationManager?.currentConversationId = conversation.id
+    }
+
+    /// Removes video transcript context (e.g. when the user dismisses the banner).
+    func clearVideoTranscriptAttachment() {
+        setTranscriptContext(text: nil, jobId: nil)
+        guard var conversation = currentConversation else { return }
+        conversation.transcript = nil
+        conversation.transcriptFilename = nil
+        if messages.count == 1,
+           let only = messages.first,
+           only.isUser,
+           only.isVideoTranscriptAttachment {
+            messages = []
+            conversation.messages = []
+        }
+        currentConversation = conversation
+        conversationManager?.save(conversation)
     }
 
     func restoreToUndownloaded(filename: String) {
@@ -653,10 +1100,34 @@ class LlamaState: ObservableObject {
 
     func complete(text: String) async {
         guard !isGenerating else { return }
-        guard let inferenceEngine else {
+        if modelSuspendedForSpeech {
+            let notice = ChatMessage(
+                content: "The language model is reloading after transcription. Please wait a moment and try again.",
+                isUser: false,
+                timestamp: Date()
+            )
+            messages.append(notice)
+            saveCurrentConversation()
             return
         }
+        if inferenceEngine == nil {
+            let loaded = await ensureModelLoaded()
+            guard loaded, inferenceEngine != nil else {
+                let detail = modelLoadError ?? "Unknown error"
+                let notice = ChatMessage(
+                    content: "Could not load the model (\(detail)). Open Manage Models to download one.",
+                    isUser: false,
+                    timestamp: Date()
+                )
+                messages.append(notice)
+                saveCurrentConversation()
+                return
+            }
+        }
 
+        guard let inferenceEngine else { return }
+
+        speechSynthesizer.stop()
         isGenerating = true
         isStopped = false
         rawResponse = ""
@@ -680,13 +1151,14 @@ class LlamaState: ObservableObject {
             if !systemPrompt.isEmpty {
                 chatMessages.append((role: "system", content: systemPrompt))
             }
+            await appendTranscriptContext(to: &chatMessages)
             for msg in messages {
                 chatMessages.append((role: msg.isUser ? "user" : "assistant", content: msg.content))
             }
 
             // Context overflow handling
             let budget = Int(Double(contextSize) * 0.95)
-            var currentTokenCount = (try? await inferenceEngine.countTokens(for: chatMessages)) ?? 0
+            var currentTokenCount = await inferenceEngine.countTokens(for: chatMessages)
             var trimmed = false
             while currentTokenCount > budget && chatMessages.count > 1 {
                 // Remove oldest non-system message
@@ -694,7 +1166,7 @@ class LlamaState: ObservableObject {
                 if removeIndex >= chatMessages.count { break }
                 chatMessages.remove(at: removeIndex)
                 trimmed = true
-                currentTokenCount = (try? await inferenceEngine.countTokens(for: chatMessages)) ?? 0
+                currentTokenCount = await inferenceEngine.countTokens(for: chatMessages)
             }
             // If still over budget with system + last user, drop system
             if currentTokenCount > budget, chatMessages.count > 1, chatMessages.first?.role == "system" {
@@ -719,7 +1191,13 @@ class LlamaState: ObservableObject {
                 return
             }
 
-            try await inferenceEngine.generateNext(messages: chatMessages)
+            do {
+                try await inferenceEngine.generateNext(messages: chatMessages)
+            } catch {
+                guard case LlamaError.decodeFailed = error else { throw error }
+                await inferenceEngine.clear()
+                try await inferenceEngine.generateNext(messages: chatMessages)
+            }
 
             while await !inferenceEngine.isComplete && !isStopped {
                 let token: String?
@@ -765,6 +1243,10 @@ class LlamaState: ObservableObject {
                                     }
                                     self.currentResponse = snapshot
                                     self.modelConfidence = confidence
+                                    self.speechSynthesizer.feed(
+                                        displayText: snapshot,
+                                        enabled: self.speakRepliesEnabled
+                                    )
                                 }
                             }
                         }
@@ -796,6 +1278,7 @@ class LlamaState: ObservableObject {
                 let aiMessage = ChatMessage(content: savedRaw, isUser: false, timestamp: Date())
                 self.messages.append(aiMessage)
                 self.currentResponse = ""
+                self.speechSynthesizer.finish(enabled: self.speakRepliesEnabled)
                 self.saveCurrentConversation()
             }
 
@@ -825,14 +1308,14 @@ class LlamaState: ObservableObject {
     }
 
     func clear() async {
-        guard let inferenceEngine else {
-            return
-        }
-
         saveCurrentConversation()
-        await inferenceEngine.clear()
+        speechSynthesizer.stop()
+        if let inferenceEngine {
+            await inferenceEngine.clear()
+        }
         messages = []
         currentResponse = ""
+        setTranscriptContext(text: nil, jobId: nil)
         currentConversation = conversationManager?.createNew()
     }
 
@@ -842,6 +1325,7 @@ class LlamaState: ObservableObject {
         }
 
         isStopped = true
+        speechSynthesizer.stop()
         await inferenceEngine.stop()
 
         // Flush filter/stripper buffers before saving
@@ -875,6 +1359,7 @@ class LlamaState: ObservableObject {
     let modelRequirements: [String: Double] = [
         "LFM2.5-1.2B Instruct Q8 (1.2 GiB)": 1.3,
         "Ministral-3B Instruct Q4 (2.0 GiB)": 2.2,
+        "Gemma 4 E2B Instruct Q4 QAT (2.6 GiB)": 2.7,
         "Gemma 4 E2B Instruct Q4 (2.9 GiB)": 3.0,
         "Gemma 4 E2B Instruct Q8 (4.6 GiB)": 5.0
     ]
@@ -899,7 +1384,7 @@ class LlamaState: ObservableObject {
             (role: "user", content: "Generate a short title for this conversation.")
         ]
 
-        let conversationMessages = chatMessagesForInference()
+        let conversationMessages = await chatMessagesForInference()
 
         do {
             await inferenceEngine.clearGenerationState()
@@ -978,6 +1463,14 @@ class LlamaState: ObservableObject {
 
         if var conversation = currentConversation {
             conversation.messages = messages
+            if let conversationTranscript {
+                if let relative = try? saveTranscriptToDisk(conversationId: conversation.id, transcript: conversationTranscript) {
+                    conversation.transcriptFilename = relative
+                    conversation.transcript = nil
+                } else {
+                    conversation.transcript = conversationTranscript
+                }
+            }
             conversation.updatedAt = Date()
             conversationManager?.save(conversation)
             currentConversation = conversation
@@ -996,6 +1489,23 @@ class LlamaState: ObservableObject {
         messages = conversation.messages
         currentConversation = conversation
         conversationManager?.currentConversationId = conversation.id
+
+        if let inline = conversation.transcript, !inline.isEmpty {
+            setTranscriptContext(text: inline, jobId: nil)
+        } else if conversation.transcriptFilename != nil {
+            setTranscriptContext(text: nil, jobId: nil)
+            let conversationId = conversation.id
+            Task {
+                _ = await loadResolvedTranscriptText()
+                await MainActor.run {
+                    guard self.currentConversation?.id == conversationId else { return }
+                    self.refreshAttachedVideoThumbnail()
+                }
+            }
+        } else {
+            setTranscriptContext(text: nil, jobId: nil)
+        }
+        refreshAttachedVideoThumbnail()
     }
 
     func startNewConversation() async {

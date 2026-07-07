@@ -4,5 +4,11 @@
 <dict>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Silo transcribes videos and voice on your device only. Audio is never sent to the cloud.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Silo uses the microphone for on-device voice mode.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Silo needs access to pick interview videos from your photo library.</string>
 </dict>
 </plist>

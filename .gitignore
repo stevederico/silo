@@ -4,6 +4,18 @@
 
 ## User settings
 xcuserdata/
+*.xcuserstate
+
+## Local signing (never commit)
+Config/Signing.local.xcconfig
+*.mobileprovision
+*.provisionprofile
+*.p12
+*.cer
+
+## Local / build artifacts
+build/
+.DS_Store
 
 ## Obj-C/Swift specific
 *.hmap

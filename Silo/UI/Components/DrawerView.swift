@@ -198,6 +198,17 @@ struct SettingsView: View {
                     }
                 }
 
+                // MARK: - Voice Section
+                Section {
+                    Toggle(isOn: $llamaState.speakRepliesEnabled) {
+                        Label("Speak replies", systemImage: "speaker.wave.2")
+                    }
+                } footer: {
+                    Text("Reads assistant replies aloud using on-device speech synthesis.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
                 // MARK: - System Prompt Section
                 Section {
                     Button(action: { showSystemPromptEditor = true }) {

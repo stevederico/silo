@@ -1,9 +1,23 @@
 import Foundation
 import llama
 
-enum LlamaError: Error {
-    case couldNotInitializeContext
+enum LlamaError: Error, LocalizedError {
+    case couldNotInitializeContext(path: String)
     case decodeFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .couldNotInitializeContext(let path):
+            let name = (path as NSString).lastPathComponent
+            #if targetEnvironment(simulator)
+            return "Could not load \(name). Large models (e.g. Gemma 4) often fail in the Simulator — use a physical iPhone, or download Ministral/LFM2.5 in Manage Models."
+            #else
+            return "Could not load \(name). The file may be corrupt or too large for available memory. Try another model in Manage Models."
+            #endif
+        case .decodeFailed:
+            return "Model inference failed while decoding. Try New Chat, or send again."
+        }
+    }
 }
 
 private class ProgressCallbackContext {
@@ -127,14 +141,23 @@ actor LlamaContext {
         guard let model else {
             print("Could not load model at \(path)")
             releaseBackend()
-            throw LlamaError.couldNotInitializeContext
+            throw LlamaError.couldNotInitializeContext(path: path)
         }
 
+        #if targetEnvironment(simulator)
+        let n_threads = max(1, min(4, ProcessInfo.processInfo.processorCount - 2))
+        #else
         let n_threads = max(1, min(8, ProcessInfo.processInfo.processorCount - 2))
+        #endif
         // print("Using \(n_threads) threads")
 
         var ctx_params = llama_context_default_params()
-        ctx_params.n_ctx = contextSize
+        #if targetEnvironment(simulator)
+        let effectiveContext = min(contextSize, 1536)
+        #else
+        let effectiveContext = contextSize
+        #endif
+        ctx_params.n_ctx = effectiveContext
         ctx_params.n_threads       = Int32(n_threads)
         ctx_params.n_threads_batch = Int32(n_threads)
         // Note: KV cache quantization (type_k/type_v = Q8_0) requires flash_attn,
@@ -146,7 +169,7 @@ actor LlamaContext {
             print("Could not load context!")
             llama_model_free(model)
             releaseBackend()
-            throw LlamaError.couldNotInitializeContext
+            throw LlamaError.couldNotInitializeContext(path: path)
         }
 
         return LlamaContext(model: model, context: context)
@@ -176,10 +199,13 @@ actor LlamaContext {
         return batch.n_tokens;
     }
 
-    func completion_init(text: String) {
+    func completion_init(text: String) throws {
         is_done = false
-        tokens_list = tokenize(text: text, add_bos: false, parse_special: true)
         temporary_invalid_cchars = []
+        entropyWindow.removeAll()
+        tokens_list = tokenize(text: text, add_bos: false, parse_special: true)
+
+        llama_memory_clear(llama_get_memory(context), true)
 
         let chunkSize = 512
         for chunkStart in stride(from: 0, to: tokens_list.count, by: chunkSize) {
@@ -194,10 +220,12 @@ actor LlamaContext {
 
             if llama_decode(context, batch) != 0 {
                 print("llama_decode() failed at chunk starting at position \(chunkStart)")
-                return
+                is_done = true
+                throw LlamaError.decodeFailed
             }
         }
 
+        previousTokens = tokens_list
         n_cur = Int32(tokens_list.count)
     }
 
@@ -651,7 +679,11 @@ actor LlamaContext {
         tokens_list.removeAll()
         temporary_invalid_cchars.removeAll()
         entropyWindow.removeAll()
-        // Keep KV cache and previousTokens for prefix reuse
+        previousTokens.removeAll()
+        n_cur = 0
+        is_done = true
+        // Clear KV between turns — re-tokenized assistant text won't match cached tokens.
+        llama_memory_clear(llama_get_memory(context), true)
     }
 
     private func tokenize(text: String, add_bos: Bool, parse_special: Bool = false) -> [llama_token] {
