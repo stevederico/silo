@@ -11,7 +11,7 @@ struct TranscriptSheetLoader: View {
     var body: some View {
         Group {
             if let transcript {
-                TranscriptView(transcript: transcript, title: "Transcript")
+                TranscriptView(transcript: transcript, title: String(localized: "Transcript"))
             } else if loadFailed {
                 NavigationStack {
                     ContentUnavailableView(
@@ -21,7 +21,8 @@ struct TranscriptSheetLoader: View {
                     )
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
-                            Button("Close") { dismiss() }
+                            Button { dismiss() } label: { Image(systemName: "xmark") }
+                                .accessibilityLabel("Close")
                         }
                     }
                 }
@@ -31,7 +32,8 @@ struct TranscriptSheetLoader: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .toolbar {
                             ToolbarItem(placement: .cancellationAction) {
-                                Button("Close") { dismiss() }
+                                Button { dismiss() } label: { Image(systemName: "xmark") }
+                                    .accessibilityLabel("Close")
                             }
                         }
                 }

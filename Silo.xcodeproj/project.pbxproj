@@ -152,6 +152,44 @@
 			knownRegions = (
 				en,
 				Base,
+				ar,
+				ca,
+				"zh-Hans",
+				"zh-Hant",
+				hr,
+				cs,
+				da,
+				nl,
+				"en-AU",
+				"en-CA",
+				"en-GB",
+				fi,
+				fr,
+				"fr-CA",
+				de,
+				el,
+				he,
+				hi,
+				hu,
+				id,
+				it,
+				ja,
+				ko,
+				ms,
+				nb,
+				pl,
+				"pt-BR",
+				"pt-PT",
+				ro,
+				ru,
+				sk,
+				es,
+				"es-419",
+				sv,
+				th,
+				tr,
+				uk,
+				vi,
 			);
 			mainGroup = 72BA6D822D4AD2B000D97817;
 			minimizedProjectReferenceProxies = 1;
@@ -323,9 +361,6 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Silo;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Silo uses the microphone for on-device voice mode.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Silo needs access to pick interview videos from your photo library.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Silo transcribes videos and voice on your device only. Audio is never sent to the cloud.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -362,9 +397,6 @@
 				INFOPLIST_KEY_CFBundleDisplayName = Silo;
 				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Silo uses the microphone for on-device voice mode.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Silo needs access to pick interview videos from your photo library.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Silo transcribes videos and voice on your device only. Audio is never sent to the cloud.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

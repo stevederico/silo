@@ -67,7 +67,7 @@ struct InputComposer: View {
             .disabled(inputsDisabled && !isListening)
 
             TextField(
-                inputsDisabled ? "Waiting for model…" : (isListening ? "Listening…" : "Ask anything"),
+                inputsDisabled ? String(localized: "Waiting for model…") : (isListening ? String(localized: "Listening…") : String(localized: "Ask anything")),
                 text: $text,
                 axis: .vertical
             )

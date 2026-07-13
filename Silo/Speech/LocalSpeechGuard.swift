@@ -13,13 +13,13 @@ enum LocalSpeechError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notAuthorized:
-            return "Speech recognition permission is required. Enable it in Settings."
+            return String(localized: "Speech recognition permission is required. Enable it in Settings.")
         case .onDeviceUnavailable:
-            return "On-device speech recognition is not available for this language. Download the language in Settings → General → Keyboard → Dictation, then try again."
+            return String(localized: "On-device speech recognition is not available for this language. Download the language in Settings → General → Keyboard → Dictation, then try again.")
         case .recognizerUnavailable:
-            return "Speech recognition is not available on this device."
+            return String(localized: "Speech recognition is not available on this device.")
         case .localeUnsupported:
-            return "The current language is not supported for on-device recognition."
+            return String(localized: "The current language is not supported for on-device recognition.")
         }
     }
 }

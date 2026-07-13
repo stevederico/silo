@@ -1,0 +1,669 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "NSMicrophoneUsageDescription": {
+      "comment": "Microphone permission prompt",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo uses the microphone for on-device voice mode."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo 使用麦克风进行设备端语音模式。"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo gebruikt de microfoon voor de spraakmodus op het apparaat."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo bruger mikrofonen til stemmetilstand på enheden."
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo koristi mikrofon za glasovni način rada na uređaju."
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "يستخدم Silo الميكروفون لوضع الصوت على الجهاز."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo 使用麥克風進行裝置上語音模式。"
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo utilitza el micròfon per al mode de veu al dispositiu."
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo používá mikrofon pro hlasový režim na zařízení."
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo käyttää mikrofonia laitteella tapahtuvaan äänitilaan."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo verwendet das Mikrofon für den geräteinternen Sprachmodus."
+          }
+        },
+        "fr-CA": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo utilise le microphone pour le mode vocal sur l’appareil."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Siloはデバイス上の音声モードのためにマイクを使用します。"
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo menggunakan mikrofon untuk mode suara di perangkat."
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A Silo a mikrofont a készüléken belüli hangmódhoz használja."
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Το Silo χρησιμοποιεί το μικρόφωνο για τη λειτουργία φωνής στη συσκευή."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo ऑन-डिवाइस वॉइस मोड के लिए माइक्रोफ़ोन का उपयोग करता है।"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo משתמש במיקרופון למצב קולי במכשיר."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo usa il microfono per la modalità vocale sul dispositivo."
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo menggunakan mikrofon untuk mod suara di peranti."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo utilise le microphone pour le mode vocal sur l’appareil."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo używa mikrofonu do trybu głosowego na urządzeniu."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo는 기기 내 음성 모드를 위해 마이크를 사용합니다."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Silo usa o microfone para o modo de voz no dispositivo."
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo bruker mikrofonen for talemodus på enheten."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo использует микрофон для голосового режима на устройстве."
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo používa mikrofón pre hlasový režim na zariadení."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Silo usa o microfone para o modo de voz no dispositivo."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo ใช้ไมโครโฟนสำหรับโหมดเสียงบนอุปกรณ์"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo, cihazda sesli mod için mikrofonu kullanır."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo usa el micrófono para el modo de voz en el dispositivo."
+          }
+        },
+        "ro": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo folosește microfonul pentru modul vocal pe dispozitiv."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo använder mikrofonen för röstläge på enheten."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo usa el micrófono para el modo de voz en el dispositivo."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo sử dụng micrô cho chế độ giọng nói trên thiết bị."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo використовує мікрофон для голосового режиму на пристрої."
+          }
+        }
+      }
+    },
+    "NSPhotoLibraryUsageDescription": {
+      "comment": "Photo library permission prompt",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo needs access to pick interview videos from your photo library."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo 需要访问您的照片图库以选择访谈视频。"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo heeft toegang nodig om interviewvideo's uit je fotobibliotheek te selecteren."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo har brug for adgang til at vælge interviewvideoer fra dit fotobibliotek."
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo treba pristup za odabir videozapisa intervjua iz vaše knjižnice fotografija."
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "يحتاج Silo إلى الوصول لاختيار فيديوهات المقابلات من مكتبة الصور."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo 需要存取權限以從照片圖庫挑選訪談影片。"
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo necessita accés per seleccionar vídeos d'entrevistes de la teva biblioteca de fotos."
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo potřebuje přístup k výběru videozáznamů rozhovorů z vaší knihovny fotografií."
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo tarvitsee pääsyn valitakseen haastatteluvideoita kuvakirjastostasi."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo benötigt Zugriff, um Interview-Videos aus deiner Fotomediathek auszuwählen."
+          }
+        },
+        "fr-CA": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo a besoin d’accéder à votre photothèque pour sélectionner des vidéos d’entrevue."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Siloはフォトライブラリからインタビュー動画を選択するためにアクセスが必要です。"
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo memerlukan akses untuk memilih video wawancara dari perpustakaan foto Anda."
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A Silo hozzáférést igényel, hogy interjúvideókat válasszon a fotókönyvtárából."
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Το Silo χρειάζεται πρόσβαση για να επιλέξει βίντεο συνεντεύξεων από τη βιβλιοθήκη φωτογραφιών σας."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo को आपकी फ़ोटो लाइब्रेरी से इंटरव्यू वीडियो चुनने के लिए पहुँच की आवश्यकता है।"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo זקוק לגישה לבחירת סרטוני ראיון מספריית התמונות שלך."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo necessita dell'accesso per selezionare video di interviste dalla tua libreria foto."
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo memerlukan akses untuk memilih video temu bual dari pustaka foto anda."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo a besoin d’accéder à votre photothèque pour sélectionner des vidéos d’interview."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo potrzebuje dostępu, aby wybierać filmy z wywiadów z Twojej biblioteki zdjęć."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo는 사진 라이브러리에서 인터뷰 비디오를 선택하기 위해 접근이 필요합니다."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Silo precisa de acesso para escolher vídeos de entrevistas da sua biblioteca de fotos."
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo trenger tilgang for å velge intervjuvideoer fra bildebiblioteket ditt."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo требуется доступ для выбора видео интервью из вашей медиатеки."
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo potrebuje prístup na výber videí z knižnice fotiek."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Silo precisa de acesso para escolher vídeos de entrevista da sua biblioteca de fotos."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo ต้องการการเข้าถึงเพื่อเลือกวิดีโอสัมภาษณ์จากคลังรูปภาพของคุณ"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo, fotoğraf kitaplığınızdan röportaj videoları seçmek için erişime ihtiyaç duyar."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo necesita acceso para seleccionar vídeos de entrevistas de tu biblioteca de fotos."
+          }
+        },
+        "ro": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo are nevoie de acces pentru a selecta videoclipuri de interviu din biblioteca foto."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo behöver åtkomst för att välja intervjuvideor från ditt fotobibliotek."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo necesita acceso para elegir videos de entrevistas de tu biblioteca de fotos."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo cần quyền truy cập để chọn video phỏng vấn từ thư viện ảnh của bạn."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo потребує доступу, щоб вибирати відео інтерв’ю з вашої бібліотеки фото."
+          }
+        }
+      }
+    },
+    "NSSpeechRecognitionUsageDescription": {
+      "comment": "Speech recognition permission prompt",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo transcribes videos and voice on your device only. Audio is never sent to the cloud."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo 仅在您的设备上转录视频和语音。音频绝不会发送到云端。"
+          }
+        },
+        "nl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo transcribeert video's en spraak alleen op je apparaat. Audio wordt nooit naar de cloud gestuurd."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo transskriberer videoer og stemme kun på din enhed. Lyd sendes aldrig til skyen."
+          }
+        },
+        "hr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo transkribira videozapise i glas samo na vašem uređaju. Audio se nikada ne šalje u oblak."
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ينسخ Silo الفيديوهات والصوت على جهازك فقط. لا يُرسل الصوت أبدًا إلى السحابة."
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo 僅在您的裝置上轉錄影片和語音。音訊絕不會傳送至雲端。"
+          }
+        },
+        "ca": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo transcriu vídeos i veu només al teu dispositiu. L'àudio no s'envia mai al núvol."
+          }
+        },
+        "cs": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo přepisuje videa a hlas pouze na vašem zařízení. Audio se nikdy neodesílá do cloudu."
+          }
+        },
+        "fi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo litteroi videot ja äänen vain laitteellasi. Ääntä ei koskaan lähetetä pilveen."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo transkribiert Videos und Sprache nur auf deinem Gerät. Audio wird niemals in die Cloud gesendet."
+          }
+        },
+        "fr-CA": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo transcrit les vidéos et la voix uniquement sur votre appareil. L’audio n’est jamais envoyé dans le nuage."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Siloは動画と音声をデバイス上でのみ文字起こしします。音声がクラウドに送信されることはありません。"
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo mentranskripsi video dan suara hanya di perangkat Anda. Audio tidak pernah dikirim ke cloud."
+          }
+        },
+        "hu": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A Silo a videókat és a hangot csak a készülékeden írja át. A hang soha nem kerül a felhőbe."
+          }
+        },
+        "el": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Το Silo μεταγράφει βίντεο και φωνή μόνο στη συσκευή σας. Ο ήχος δεν αποστέλλεται ποτέ στο cloud."
+          }
+        },
+        "hi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo वीडियो और वॉइस को केवल आपके डिवाइस पर ट्रांसक्राइब करता है। ऑडियो कभी भी क्लाउड पर नहीं भेजा जाता।"
+          }
+        },
+        "he": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo מתמלל סרטונים וקול במכשיר שלך בלבד. האודיו לעולם אינו נשלח לענן."
+          }
+        },
+        "it": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo trascrive video e voce solo sul tuo dispositivo. L'audio non viene mai inviato al cloud."
+          }
+        },
+        "ms": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo mentranskripsi video dan suara pada peranti anda sahaja. Audio tidak pernah dihantar ke awan."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo transcrit les vidéos et la voix uniquement sur votre appareil. L’audio n’est jamais envoyé dans le cloud."
+          }
+        },
+        "pl": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo transkrybuje filmy i głos wyłącznie na Twoim urządzeniu. Dźwięk nigdy nie jest wysyłany do chmury."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo는 기기에서만 비디오와 음성을 트랜스크립션합니다. 오디오는 클라우드로 전송되지 않습니다."
+          }
+        },
+        "pt-PT": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Silo transcreve vídeos e voz apenas no seu dispositivo. O áudio nunca é enviado para a nuvem."
+          }
+        },
+        "nb": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo transkriberer videoer og tale kun på enheten din. Lyd sendes aldri til skyen."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo транскрибирует видео и голос только на вашем устройстве. Аудио никогда не отправляется в облако."
+          }
+        },
+        "sk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo prepisuje videá a hlas iba na vašom zariadení. Zvuk sa nikdy neodosiela do cloudu."
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Silo transcreve vídeos e voz apenas no seu dispositivo. O áudio nunca é enviado para a nuvem."
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo ถอดเสียงวิดีโอและเสียงบนอุปกรณ์ของคุณเท่านั้น เสียงจะไม่ถูกส่งไปยังคลาวด์"
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo, videoları ve sesi yalnızca cihazınızda transkribe eder. Ses asla buluta gönderilmez."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo transcribe vídeos y voz solo en tu dispositivo. El audio nunca se envía a la nube."
+          }
+        },
+        "ro": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo transcrie videoclipuri și voce doar pe dispozitivul tău. Audio-ul nu este niciodată trimis în cloud."
+          }
+        },
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo transkriberar videor och röst endast på din enhet. Ljud skickas aldrig till molnet."
+          }
+        },
+        "es-419": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo transcribe videos y voz solo en tu dispositivo. El audio nunca se envía a la nube."
+          }
+        },
+        "vi": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo chuyển ngữ video và giọng nói chỉ trên thiết bị của bạn. Âm thanh không bao giờ được gửi lên đám mây."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Silo транскрибує відео та голос лише на вашому пристрої. Аудіо ніколи не надсилається в хмару."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

@@ -7,6 +7,8 @@ final class TranscriptionJobManager: ObservableObject {
     @Published private(set) var progress: Double = 0
     @Published private(set) var statusMessage = ""
     @Published private(set) var isRunning = false
+    /// True when the last job ended via user cancellation. Drives UI without string-matching `statusMessage`.
+    @Published private(set) var wasCancelled = false
     @Published var completedJobNeedsAttention: UUID?
     /// Shown after the job ends until cleared or a new job starts.
     @Published private(set) var failureMessage: String?
@@ -37,7 +39,8 @@ final class TranscriptionJobManager: ObservableObject {
         }
         endBackgroundTask()
         isRunning = false
-        statusMessage = "Cancelled"
+        wasCancelled = true
+        statusMessage = String(localized: "Cancelled")
         activeJobId = nil
         videoThumbnail = nil
     }
@@ -93,8 +96,9 @@ final class TranscriptionJobManager: ObservableObject {
 
         activeJobId = jobId
         isRunning = true
+        wasCancelled = false
         progress = 0
-        statusMessage = "Queued…"
+        statusMessage = String(localized: "Queued…")
 
         // Auto wire whisper model if available
         if let ls = self.llamaState {
@@ -116,10 +120,10 @@ final class TranscriptionJobManager: ObservableObject {
         }
 
         await llamaState?.suspendModelForSpeech()
-        statusMessage = "Model unloaded for transcription"
+        statusMessage = String(localized: "Model unloaded for transcription")
 
         guard var checkpoint = TranscriptionCheckpointStore.load(jobId: jobId) else {
-            statusMessage = "Job missing"
+            statusMessage = String(localized: "Job missing")
             activeJobId = nil
             await llamaState?.resumeModelAfterSpeech()
             return
@@ -152,9 +156,7 @@ final class TranscriptionJobManager: ObservableObject {
                 throw NSError(
                     domain: "TranscriptionJob",
                     code: 2,
-                    userInfo: [NSLocalizedDescriptionKey: """
-                    No speech detected. Use a video with clear spoken audio and download a Whisper model in Manage Models.
-                    """]
+                    userInfo: [NSLocalizedDescriptionKey: String(localized: "No speech detected. Use a video with clear spoken audio and download a Whisper model in Manage Models.")]
                 )
             }
 
@@ -165,7 +167,7 @@ final class TranscriptionJobManager: ObservableObject {
             try TranscriptionCheckpointStore.save(checkpoint)
 
             progress = 1
-            statusMessage = "Done"
+            statusMessage = String(localized: "Done")
             completedJobNeedsAttention = jobId
             activeJobId = nil
 
@@ -173,10 +175,11 @@ final class TranscriptionJobManager: ObservableObject {
             await llamaState?.resumeModelAfterSpeech()
 
             if llamaState?.transcriptCharacterCount == 0 {
-                failureMessage = "Transcription finished but no transcript was saved. Try a video with clearer speech."
+                failureMessage = String(localized: "Transcription finished but no transcript was saved. Try a video with clearer speech.")
             }
         } catch is CancellationError {
-            statusMessage = "Cancelled"
+            wasCancelled = true
+            statusMessage = String(localized: "Cancelled")
             activeJobId = nil
             await llamaState?.resumeModelAfterSpeech()
         } catch {

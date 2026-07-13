@@ -11,7 +11,7 @@ struct TranscriptionProgressBanner: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Image(systemName: "waveform")
-                Text(modelSuspended ? "Transcribing (model unloaded)" : "Transcribing…")
+                Text(modelSuspended ? String(localized: "Transcribing (model unloaded)") : String(localized: "Transcribing…"))
                     .font(.subheadline.weight(.medium))
                 Spacer()
                 Button("Cancel", role: .cancel, action: onCancel)
@@ -43,8 +43,12 @@ struct TranscriptionErrorBanner: View {
                 Text("Transcription failed")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                Button("Dismiss", action: onDismiss)
-                    .font(.caption)
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark.circle.fill")
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityLabel("Dismiss")
             }
             Text(message)
                 .font(.caption)
@@ -157,24 +161,24 @@ struct VideoTranscriptBanner: View {
     private var title: String {
         switch phase {
         case .preparing:
-            return "Video transcript"
+            return String(localized: "Video transcript")
         case .transcribing(_, _, let suspended):
-            return suspended ? "Transcribing (model unloaded)" : "Transcribing video…"
+            return suspended ? String(localized: "Transcribing (model unloaded)") : String(localized: "Transcribing video…")
         case .ready:
-            return "Video transcript attached"
+            return String(localized: "Video transcript attached")
         case .failed:
-            return "Transcription failed"
+            return String(localized: "Transcription failed")
         }
     }
 
     private var subtitle: String {
         switch phase {
         case .preparing:
-            return "Preparing…"
+            return String(localized: "Preparing…")
         case .transcribing(_, let message, _):
-            return message.isEmpty ? "Starting…" : message
+            return message.isEmpty ? String(localized: "Starting…") : message
         case .ready(let count):
-            return "\(count) characters · tap to view"
+            return String(localized: "\(count) characters · tap to view")
         case .failed(let message):
             return message
         }

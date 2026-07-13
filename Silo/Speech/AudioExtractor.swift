@@ -8,9 +8,9 @@ enum AudioExtractorError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noAudioTrack:
-            return "This file has no audio track to transcribe."
+            return String(localized: "This file has no audio track to transcribe.")
         case .exportFailed(let reason):
-            return "Could not extract audio: \(reason)"
+            return String(localized: "Could not extract audio: \(reason)")
         }
     }
 }

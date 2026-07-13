@@ -18,15 +18,15 @@ struct HeaderView: View {
     private var headerTitle: String {
         if isDownloading {
             let pct = Int(downloadProgress * 100)
-            return pct > 0 ? "Downloading \(pct)%" : "Connecting..."
+            return pct > 0 ? String(localized: "Downloading \(pct)%") : String(localized: "Connecting…")
         }
-        if isLoadingModel { return "Loading..." }
+        if isLoadingModel { return String(localized: "Loading…") }
         return truncatedModelName
     }
 
     private var truncatedModelName: String {
         if currentModel.isEmpty {
-            return models.isEmpty ? "No Model" : ""
+            return models.isEmpty ? String(localized: "No Model") : ""
         }
         return Self.parseModelDisplayName(currentModel)
     }
@@ -200,7 +200,8 @@ struct ModelPickerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button { dismiss() } label: { Image(systemName: "xmark") }
+                        .accessibilityLabel("Close")
                 }
             }
         }
