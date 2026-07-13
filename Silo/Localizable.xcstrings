@@ -18098,6 +18098,10 @@
           }
         }
       }
+    },
+    "Hugging Face model URL": {
+      "comment": "Hugging Face is a proper noun; keep English",
+      "shouldTranslate": false
     }
   },
   "version": "1.0"
