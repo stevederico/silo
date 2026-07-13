@@ -17,8 +17,8 @@ struct ConversationSummary: Identifiable {
 
     var relativeDate: String {
         let calendar = Calendar.current
-        if calendar.isDateInToday(updatedAt) { return "Today" }
-        if calendar.isDateInYesterday(updatedAt) { return "Yesterday" }
+        if calendar.isDateInToday(updatedAt) { return String(localized: "Today") }
+        if calendar.isDateInYesterday(updatedAt) { return String(localized: "Yesterday") }
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d"
         return formatter.string(from: updatedAt)

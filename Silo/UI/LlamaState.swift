@@ -264,8 +264,8 @@ struct Conversation: Identifiable, Codable {
 
     var relativeDate: String {
         let calendar = Calendar.current
-        if calendar.isDateInToday(updatedAt) { return "Today" }
-        if calendar.isDateInYesterday(updatedAt) { return "Yesterday" }
+        if calendar.isDateInToday(updatedAt) { return String(localized: "Today") }
+        if calendar.isDateInYesterday(updatedAt) { return String(localized: "Yesterday") }
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d"
         return formatter.string(from: updatedAt)
@@ -501,7 +501,7 @@ class LlamaState: ObservableObject {
             return
         }
         // Only oversized models on disk (e.g. Gemma 4) — fetch a Simulator-friendly default.
-        modelLoadError = "Gemma 4 is too large for Simulator. Downloading LFM2.5 (1.2 GB)…"
+        modelLoadError = String(localized: "Gemma 4 is too large for Simulator. Downloading LFM2.5 (1.2 GB)…")
         let lfm = Self.lfmSimulatorModel
         if !FileManager.default.fileExists(atPath: getDocumentsDirectory().appendingPathComponent(lfm.filename).path) {
             downloadModel(lfm)
@@ -590,10 +590,10 @@ class LlamaState: ObservableObject {
 
         guard let modelURL = resolveModelFileURL() else {
             #if targetEnvironment(simulator)
-            modelLoadError = "No Simulator-sized model found. Open Manage Models and download LFM2.5 (1.2 GB), or wait for the automatic download."
+            modelLoadError = String(localized: "No Simulator-sized model found. Open Manage Models and download LFM2.5 (1.2 GB), or wait for the automatic download.")
             Task { await bootstrapSimulatorModelIfNeeded() }
             #else
-            modelLoadError = "No model file found on device."
+            modelLoadError = String(localized: "No model file found on device.")
             #endif
             return false
         }
@@ -1002,7 +1002,7 @@ class LlamaState: ObservableObject {
             suspendedModelURL = nil
         }
         guard let modelURL = suspendedModelURL ?? resolveModelFileURL() else {
-            modelLoadError = "Could not find model file to reload."
+            modelLoadError = String(localized: "Could not find model file to reload.")
             return
         }
 
@@ -1113,7 +1113,7 @@ class LlamaState: ObservableObject {
         if inferenceEngine == nil {
             let loaded = await ensureModelLoaded()
             guard loaded, inferenceEngine != nil else {
-                let detail = modelLoadError ?? "Unknown error"
+                let detail = modelLoadError ?? String(localized: "Unknown error")
                 let notice = ChatMessage(
                     content: "Could not load the model (\(detail)). Open Manage Models to download one.",
                     isUser: false,

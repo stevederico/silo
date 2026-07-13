@@ -119,7 +119,7 @@ struct ConversationRow: View {
 
 struct MenuRow: View {
     let icon: String
-    let title: String
+    let title: LocalizedStringKey
     let action: () -> Void
 
     var body: some View {
