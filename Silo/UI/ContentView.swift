@@ -322,8 +322,8 @@ struct ContentView: View {
         if let videoImportError {
             return .failed(message: videoImportError)
         }
-        if jobManager.statusMessage == "Cancelled" {
-            return .failed(message: "Cancelled")
+        if jobManager.wasCancelled {
+            return .failed(message: String(localized: "Cancelled"))
         }
         return .preparing
     }
@@ -343,7 +343,7 @@ struct ContentView: View {
         videoPickerItem = nil
         do {
             guard let movie = try await item.loadTransferable(type: ImportedVideoFile.self) else {
-                videoImportError = "Could not load video from Photos."
+                videoImportError = String(localized: "Could not load video from Photos.")
                 return
             }
             _ = try await jobManager.startJob(mediaURL: movie.url, llamaState: llamaState)
@@ -358,7 +358,7 @@ struct ContentView: View {
         guard !llamaState.isGenerating else { return }
 
         if llamaState.modelSuspendedForSpeech {
-            voiceErrorMessage = "Model is reloading after transcription. Wait a moment."
+            voiceErrorMessage = String(localized: "Model is reloading after transcription. Wait a moment.")
             return
         }
 
@@ -371,7 +371,7 @@ struct ContentView: View {
 
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
-            voiceErrorMessage = "No speech detected. Try again."
+            voiceErrorMessage = String(localized: "No speech detected. Try again.")
             return
         }
 
@@ -385,7 +385,7 @@ struct ContentView: View {
         if !llamaState.isModelLoaded {
             let loaded = await llamaState.ensureModelLoaded()
             if !loaded {
-                voiceErrorMessage = llamaState.modelLoadError ?? "Could not load model."
+                voiceErrorMessage = llamaState.modelLoadError ?? String(localized: "Could not load model.")
                 return
             }
         }

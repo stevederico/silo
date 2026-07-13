@@ -1,0 +1,252 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Active" : {
+
+    },
+    "AI models may generate inaccurate, biased, or inappropriate content. All responses are produced on-device and are not reviewed or filtered." : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Cancelled" : {
+
+    },
+    "Close" : {
+
+    },
+    "Context Size" : {
+
+    },
+    "Could not extract audio: %@" : {
+
+    },
+    "Could not load model." : {
+
+    },
+    "Could not load the transcript file." : {
+
+    },
+    "Could not load video from Photos." : {
+
+    },
+    "Dismiss" : {
+
+    },
+    "Dismiss video transcript" : {
+
+    },
+    "Done" : {
+
+    },
+    "Downloaded" : {
+
+    },
+    "Downloaded Models" : {
+
+    },
+    "Downloaded Speech Models" : {
+
+    },
+    "Job missing" : {
+
+    },
+    "Larger context allows longer conversations but uses more memory. Model will reload on change." : {
+
+    },
+    "Load" : {
+
+    },
+    "Load Custom Model" : {
+
+    },
+    "Loading transcript…" : {
+
+    },
+    "Loading Whisper model…" : {
+
+    },
+    "Manage Models" : {
+
+    },
+    "Model is reloading after transcription. Wait a moment." : {
+
+    },
+    "Model unloaded for transcription" : {
+
+    },
+    "No speech detected. Try again." : {
+
+    },
+    "No speech detected. Use a video with clear spoken audio and download a Whisper model in Manage Models." : {
+
+    },
+    "On-device speech recognition is not available for this language. Download the language in Settings → General → Keyboard → Dictation, then try again." : {
+
+    },
+    "Open Source Licenses" : {
+
+    },
+    "Preparing audio for Whisper…" : {
+
+    },
+    "Preparing…" : {
+
+    },
+    "Privacy Policy" : {
+
+    },
+    "Queued…" : {
+
+    },
+    "Reads assistant replies aloud using on-device speech synthesis." : {
+
+    },
+    "Recommended Models" : {
+
+    },
+    "Save" : {
+
+    },
+    "Select Model" : {
+
+    },
+    "Settings" : {
+
+    },
+    "Speak replies" : {
+
+    },
+    "Speech Models (Whisper)" : {
+
+    },
+    "Speech recognition is not available on this device." : {
+
+    },
+    "Speech recognition permission is required. Enable it in Settings." : {
+
+    },
+    "Starting…" : {
+
+    },
+    "Stop & send" : {
+
+    },
+    "System Prompt" : {
+
+    },
+    "The current language is not supported for on-device recognition." : {
+
+    },
+    "This file has no audio track to transcribe." : {
+
+    },
+    "Thinking" : {
+
+    },
+    "Transcribing (model unloaded)" : {
+
+    },
+    "Transcribing part %lld of %lld with Whisper…" : {
+
+    },
+    "Transcribing video…" : {
+
+    },
+    "Transcribing…" : {
+
+    },
+    "Transcript" : {
+
+    },
+    "Transcript unavailable" : {
+
+    },
+    "Transcription failed" : {
+
+    },
+    "Transcription finished but no transcript was saved. Try a video with clearer speech." : {
+
+    },
+    "Video transcript" : {
+
+    },
+    "Video transcript attached" : {
+
+    },
+    "Voice input" : {
+
+    },
+    "%lld chars" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld char"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld chars"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld characters" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld character"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld characters"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld characters · tap to view" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld character · tap to view"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld characters · tap to view"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld words · %lld characters" : {
+
+    }
+  },
+  "version" : "1.0"
+}

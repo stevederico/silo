@@ -37,11 +37,11 @@ actor TranscriptionEngine {
             throw WhisperError.couldNotInitializeContext(path: "No whisper model configured. Call configure(whisperModelPath:) first.")
         }
 
-        onProgress?(TranscriptionProgress(fraction: 0.05, message: "Loading Whisper model…", completedChunks: 0, totalChunks: 0))
+        onProgress?(TranscriptionProgress(fraction: 0.05, message: String(localized: "Loading Whisper model…"), completedChunks: 0, totalChunks: 0))
 
         try await whisperEngine.initialize(modelPath: modelPath)
 
-        onProgress?(TranscriptionProgress(fraction: 0.1, message: "Preparing audio for Whisper…", completedChunks: 0, totalChunks: 0))
+        onProgress?(TranscriptionProgress(fraction: 0.1, message: String(localized: "Preparing audio for Whisper…"), completedChunks: 0, totalChunks: 0))
 
         // For whisper we prefer direct 16kHz samples (no more M4A dependency for transcription)
         let audioURL: URL
@@ -79,7 +79,7 @@ actor TranscriptionEngine {
 
             onProgress?(TranscriptionProgress(
                 fraction: Double(index) / Double(max(total, 1)),
-                message: "Transcribing part \(index + 1) of \(total) with Whisper…",
+                message: String(localized: "Transcribing part \(index + 1) of \(total) with Whisper…"),
                 completedChunks: index,
                 totalChunks: total
             ))
