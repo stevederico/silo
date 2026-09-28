@@ -2,19 +2,22 @@ import Foundation
 import whisper
 
 enum WhisperError: Error, LocalizedError {
+    case modelNotConfigured
     case couldNotInitializeContext(path: String)
     case transcriptionFailed
     case invalidAudio
 
     var errorDescription: String? {
         switch self {
+        case .modelNotConfigured:
+            return String(localized: "No Whisper model downloaded. Download one in Manage Models.")
         case .couldNotInitializeContext(let path):
             let name = (path as NSString).lastPathComponent
-            return "Could not load Whisper model \(name). Ensure it's a valid ggml model and try again."
+            return String(localized: "Could not load Whisper model \(name). Ensure it's a valid ggml model and try again.")
         case .transcriptionFailed:
-            return "Whisper transcription failed."
+            return String(localized: "Whisper transcription failed.")
         case .invalidAudio:
-            return "Audio data is invalid or too short for transcription."
+            return String(localized: "Audio data is invalid or too short for transcription.")
         }
     }
 }

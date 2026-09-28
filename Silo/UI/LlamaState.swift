@@ -235,7 +235,7 @@ struct Conversation: Identifiable, Codable {
 
     init(
         id: UUID = UUID(),
-        title: String = "New Chat",
+        title: String = Conversation.defaultTitle,
         messages: [ChatMessage] = [],
         transcript: String? = nil,
         transcriptFilename: String? = nil,
@@ -251,24 +251,19 @@ struct Conversation: Identifiable, Codable {
         self.updatedAt = updatedAt
     }
 
+    /// Stored default titles stay English so existing files keep matching; they are localized for display.
+    static let defaultTitle = "New Chat"
+    static let videoTitle = "Video chat"
+
     var displayTitle: String {
-        if title != "New Chat" && !title.isEmpty {
-            return title
+        if title != Self.defaultTitle && !title.isEmpty {
+            return title == Self.videoTitle ? String(localized: "Video chat") : title
         }
         if let firstUserMessage = messages.first(where: { $0.isUser }) {
             let content = firstUserMessage.content
             return content.count > 40 ? String(content.prefix(40)) + "..." : content
         }
-        return title
-    }
-
-    var relativeDate: String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(updatedAt) { return String(localized: "Today") }
-        if calendar.isDateInYesterday(updatedAt) { return String(localized: "Yesterday") }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
-        return formatter.string(from: updatedAt)
+        return String(localized: "New Chat")
     }
 }
 
@@ -1046,7 +1041,7 @@ class LlamaState: ObservableObject {
         }
 
         var conversation = conversationManager?.createNew() ?? Conversation()
-        conversation.title = "Video chat"
+        conversation.title = Conversation.videoTitle
 
         if let jobId = transcriptJobId {
             VideoThumbnailGenerator.copyJobThumbnailToConversation(jobId: jobId, conversationId: conversation.id)
@@ -1102,7 +1097,7 @@ class LlamaState: ObservableObject {
         guard !isGenerating else { return }
         if modelSuspendedForSpeech {
             let notice = ChatMessage(
-                content: "The language model is reloading after transcription. Please wait a moment and try again.",
+                content: String(localized: "The language model is reloading after transcription. Please wait a moment and try again."),
                 isUser: false,
                 timestamp: Date()
             )
@@ -1115,7 +1110,7 @@ class LlamaState: ObservableObject {
             guard loaded, inferenceEngine != nil else {
                 let detail = modelLoadError ?? String(localized: "Unknown error")
                 let notice = ChatMessage(
-                    content: "Could not load the model (\(detail)). Open Manage Models to download one.",
+                    content: String(localized: "Could not load the model (\(detail)). Open Manage Models to download one."),
                     isUser: false,
                     timestamp: Date()
                 )

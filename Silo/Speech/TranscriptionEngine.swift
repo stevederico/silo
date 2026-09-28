@@ -34,7 +34,7 @@ actor TranscriptionEngine {
         }
 
         guard let modelPath = whisperModelPath else {
-            throw WhisperError.couldNotInitializeContext(path: "No whisper model configured. Call configure(whisperModelPath:) first.")
+            throw WhisperError.modelNotConfigured
         }
 
         onProgress?(TranscriptionProgress(fraction: 0.05, message: String(localized: "Loading Whisper model…"), completedChunks: 0, totalChunks: 0))
@@ -50,7 +50,7 @@ actor TranscriptionEngine {
            let audioName = checkpoint.audioFilename {
             audioURL = TranscriptionCheckpointStore.jobDirectory(jobId).appendingPathComponent(audioName)
             guard FileManager.default.fileExists(atPath: audioURL.path) else {
-                throw AudioExtractorError.exportFailed("cached audio missing")
+                throw AudioExtractorError.unreadable
             }
         } else {
             // Export to a temp location (we'll load samples directly)
@@ -125,7 +125,7 @@ actor TranscriptionEngine {
             transcript = inlineParts.joined(separator: "\n\n")
         }
 
-        onProgress?(TranscriptionProgress(fraction: 1, message: "Done", completedChunks: total, totalChunks: total))
+        onProgress?(TranscriptionProgress(fraction: 1, message: String(localized: "Done"), completedChunks: total, totalChunks: total))
 
         // Clean up engine
         await whisperEngine.deinitialize()

@@ -19,9 +19,7 @@ struct ConversationSummary: Identifiable {
         let calendar = Calendar.current
         if calendar.isDateInToday(updatedAt) { return String(localized: "Today") }
         if calendar.isDateInYesterday(updatedAt) { return String(localized: "Yesterday") }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
-        return formatter.string(from: updatedAt)
+        return updatedAt.formatted(.dateTime.month(.abbreviated).day())
     }
 }
 
