@@ -21,6 +21,7 @@ final class TranscriptionJobManager: ObservableObject {
 
     func clearFailure() {
         failureMessage = nil
+        wasCancelled = false
     }
 
     private let engine = TranscriptionEngine()
@@ -115,14 +116,19 @@ final class TranscriptionJobManager: ObservableObject {
     private func runJob(jobId: UUID, mediaURL: URL) async {
         beginBackgroundTask()
         defer {
-            endBackgroundTask()
-            isRunning = false
+            if !isSuperseded(jobId) {
+                endBackgroundTask()
+                isRunning = false
+            }
         }
 
         await llamaState?.suspendModelForSpeech()
-        statusMessage = String(localized: "Model unloaded for transcription")
+        if activeJobId == jobId {
+            statusMessage = String(localized: "Model unloaded for transcription")
+        }
 
         guard var checkpoint = TranscriptionCheckpointStore.load(jobId: jobId) else {
+            guard !isSuperseded(jobId) else { return }
             statusMessage = String(localized: "Job missing")
             activeJobId = nil
             await llamaState?.resumeModelAfterSpeech()
@@ -146,8 +152,9 @@ final class TranscriptionJobManager: ObservableObject {
                 startingChunkIndex: startChunk
             ) { [weak self] update in
                 Task { @MainActor in
-                    self?.progress = update.fraction
-                    self?.statusMessage = update.message
+                    guard let self, self.activeJobId == jobId else { return }
+                    self.progress = update.fraction
+                    self.statusMessage = update.message
                 }
             }
 
@@ -178,11 +185,12 @@ final class TranscriptionJobManager: ObservableObject {
                 failureMessage = String(localized: "Transcription finished but no transcript was saved. Try a video with clearer speech.")
             }
         } catch is CancellationError {
-            wasCancelled = true
-            statusMessage = String(localized: "Cancelled")
+            // cancel() already set the cancelled state; only reload the model if no newer job took over.
+            guard !isSuperseded(jobId) else { return }
             activeJobId = nil
             await llamaState?.resumeModelAfterSpeech()
         } catch {
+            guard !isSuperseded(jobId) else { return }
             let message = Self.describeFailure(error)
             if var checkpoint = TranscriptionCheckpointStore.load(jobId: jobId) {
                 checkpoint.state = .failed
@@ -195,6 +203,11 @@ final class TranscriptionJobManager: ObservableObject {
             activeJobId = nil
             await llamaState?.resumeModelAfterSpeech()
         }
+    }
+
+    /// A cancelled job can unwind after a newer job started. It must not touch the newer job's state.
+    private func isSuperseded(_ jobId: UUID) -> Bool {
+        activeJobId != nil && activeJobId != jobId
     }
 
     private func beginBackgroundTask() {

@@ -3,12 +3,18 @@ import Foundation
 
 enum AudioExtractorError: LocalizedError {
     case noAudioTrack
+    case tooShortOrSilent
+    case unreadable
     case exportFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .noAudioTrack:
             return String(localized: "This file has no audio track to transcribe.")
+        case .tooShortOrSilent:
+            return String(localized: "The audio track is too short or silent to transcribe.")
+        case .unreadable:
+            return String(localized: "Could not read the audio in this file.")
         case .exportFailed(let reason):
             return String(localized: "Could not extract audio: \(reason)")
         }
@@ -34,7 +40,7 @@ enum AudioExtractor {
         }
 
         guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A) else {
-            throw AudioExtractorError.exportFailed("export session unavailable")
+            throw AudioExtractorError.unreadable
         }
         export.timeRange = CMTimeRange(start: .zero, duration: try await asset.load(.duration))
 
@@ -46,7 +52,7 @@ enum AudioExtractor {
 
         let seconds = try await secondsOfAudio(at: outputURL)
         guard seconds >= 0.3 else {
-            throw AudioExtractorError.exportFailed("audio track is too short or silent")
+            throw AudioExtractorError.tooShortOrSilent
         }
         return outputURL
     }
@@ -82,7 +88,7 @@ enum AudioExtractor {
         }
 
         guard let export = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetAppleM4A) else {
-            throw AudioExtractorError.exportFailed("chunk export unavailable")
+            throw AudioExtractorError.unreadable
         }
         let start = CMTime(seconds: startSeconds, preferredTimescale: 600)
         let end = CMTime(seconds: endSeconds, preferredTimescale: 600)
@@ -127,14 +133,14 @@ enum AudioExtractor {
 
         guard let reader = try? AVAssetReader(asset: asset),
               let track = audioTracks.first else {
-            throw AudioExtractorError.exportFailed("Failed to create AVAssetReader for Whisper samples")
+            throw AudioExtractorError.unreadable
         }
 
         let output = AVAssetReaderAudioMixOutput(audioTracks: [track], audioSettings: outputSettings)
         reader.add(output)
 
         guard reader.startReading() else {
-            throw AudioExtractorError.exportFailed("AVAssetReader failed to start")
+            throw AudioExtractorError.unreadable
         }
 
         var samples: [Float] = []
@@ -154,7 +160,7 @@ enum AudioExtractor {
         }
 
         if samples.isEmpty {
-            throw AudioExtractorError.exportFailed("No audio samples extracted")
+            throw AudioExtractorError.tooShortOrSilent
         }
 
         return samples

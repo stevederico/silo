@@ -8,6 +8,15 @@
 
 - Add Gemma 4 E2B QAT (Quantization-Aware Training) as default — better quality + efficiency on-device via latest Unsloth GGUF (matches llama.cpp)
 
+2.3.0
+
+  Add 35 languages
+  Fix transcription cancel race
+  Fix stale cancelled banner
+  Localize error messages
+  Localize chat titles
+  Localize drawer dates
+
 2.2.0
 
   Add AGENTS.md
