@@ -1,5 +1,24 @@
 import Foundation
 import UIKit
+import os
+
+/// Why a model may not load or run right now: too little free memory for its
+/// weights, or an iPhone that is already critically hot.
+enum DeviceGuardError: LocalizedError {
+    case notEnoughMemory(neededGiB: Double, freeGiB: Double)
+    case tooHot
+
+    var errorDescription: String? {
+        switch self {
+        case .notEnoughMemory(let needed, let free):
+            let neededText = String(format: "%.1f", needed)
+            let freeText = String(format: "%.1f", free)
+            return String(localized: "This model needs about \(neededText) GB of free memory, but only \(freeText) GB is available. Close other apps or pick a smaller model in Manage Models.")
+        case .tooHot:
+            return String(localized: "Your iPhone is too hot to run the model right now. Let it cool down and try again.")
+        }
+    }
+}
 
 struct Model: Identifiable {
     var id = UUID()
@@ -554,7 +573,26 @@ class LlamaState: ObservableObject {
     }
     #endif
 
+    /// Refuses a load the device cannot take: the model's weights must fit in
+    /// what iOS still lets this app allocate (`os_proc_available_memory`, far
+    /// less than total RAM), and the device must not be critically hot.
+    /// Simulator and Mac skip the memory check.
+    private static func checkDevice(modelURL: URL) throws {
+        if ProcessInfo.processInfo.thermalState == .critical {
+            throw DeviceGuardError.tooHot
+        }
+        #if os(iOS) && !targetEnvironment(simulator) && !targetEnvironment(macCatalyst)
+        let size = Double((try? modelURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        let available = Double(os_proc_available_memory())
+        if size > 0, available > 0, size > available {
+            let gib = 1024.0 * 1024 * 1024
+            throw DeviceGuardError.notEnoughMemory(neededGiB: size / gib, freeGiB: available / gib)
+        }
+        #endif
+    }
+
     private func initializeEngine(at modelURL: URL) async throws {
+        try Self.checkDevice(modelURL: modelURL)
         let engine = LlamaCppEngine()
         inferenceEngine = engine
         do {
@@ -1122,6 +1160,17 @@ class LlamaState: ObservableObject {
 
         guard let inferenceEngine else { return }
 
+        if ProcessInfo.processInfo.thermalState == .critical {
+            let notice = ChatMessage(
+                content: DeviceGuardError.tooHot.errorDescription ?? "",
+                isUser: false,
+                timestamp: Date()
+            )
+            messages.append(notice)
+            saveCurrentConversation()
+            return
+        }
+
         speechSynthesizer.stop()
         isGenerating = true
         isStopped = false
@@ -1359,12 +1408,14 @@ class LlamaState: ObservableObject {
         "Gemma 4 E2B Instruct Q8 (4.6 GiB)": 5.0
     ]
 
+    /// Recommended when the model fits in about 60% of total RAM: iOS lets
+    /// one app use only part of it, and a model near the limit runs hot.
     func canRunModel(_ modelName: String) -> Bool {
         guard let requiredRAM = modelRequirements[modelName] else {
             return true
         }
         let totalRAM = getTotalRAMInGiB()
-        return totalRAM >= requiredRAM
+        return totalRAM * 0.6 >= requiredRAM
     }
 
     // MARK: - Title Generation
