@@ -8,6 +8,13 @@
 
 - Add Gemma 4 E2B QAT (Quantization-Aware Training) as default — better quality + efficiency on-device via latest Unsloth GGUF (matches llama.cpp)
 
+2.4.0
+
+  Add memory guard
+  Add heat guard
+  Tighten model recommendations
+  Bump marketing version
+
 2.3.0
 
   Add 35 languages
